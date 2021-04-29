@@ -44,7 +44,7 @@ async def command_createteam(message):
 
 async def command_register(message):
     #Check if user is already registered
-    cursor.execute("SELECT urt_auth FROM Users WHERE discord_id = '%s'", message.author.id)  
+    cursor.execute("SELECT urt_auth FROM Users WHERE discord_id = %s;", (message.author.id,)) 
     if cursor.fetchone():
         await message.channel.send("User already registered.")
         return
@@ -56,19 +56,19 @@ async def command_register(message):
         return
 
     #Check if auth is already registered
-    cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = '%s'", args[0])   
+    cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (args[0],))   
     if cursor.fetchone():
         await message.channel.send("Auth already registered.")
         return
 
     #Check if ingame name is already taken
-    cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = '%s'", args[1])   
+    cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (args[1],))   
     if cursor.fetchone():
         await message.channel.send("In-game name already taken.")
         return
 
     #Add user to DB and remove unregistered role
-    cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name) VALUES (%s, %s, %s) ;",(message.author.id, args[0], args[1]))
+    cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name) VALUES (%s, %s, %s) ;", (message.author.id, args[0], args[1]))
     conn.commit()
     await message.channel.send("User successfully registered.")
     await message.author.remove_roles(discord.utils.get(client.guilds[0].roles, id=role_unregistered_id))
@@ -119,7 +119,7 @@ async def on_message(message):
 @client.event
 async def on_member_join(member):
     #Check if user is already registered and rename them if yes
-    cursor.execute("SELECT ingame_name FROM Users WHERE discord_id = '%s'", {member.id})   
+    cursor.execute("SELECT ingame_name FROM Users WHERE discord_id = %s", (member.id,))   
     for name in cursor:
         await member.edit(nick=name[0])
         return
@@ -132,3 +132,4 @@ async def on_ready():
     await client.change_presence(activity=discord.Game(name="Urban Terror"))    
 
 client.run(os.getenv('TOKEN'))
+
