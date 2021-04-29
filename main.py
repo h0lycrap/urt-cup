@@ -119,7 +119,7 @@ async def on_message(message):
 @client.event
 async def on_member_join(member):
     #Check if user is already registered and rename them if yes
-    cursor.execute("SELECT ingame_name FROM Users WHERE discord_id = %s", {member.id})   
+    cursor.execute("SELECT ingame_name FROM Users WHERE discord_id = '%s'", {member.id})   
     for name in cursor:
         await member.edit(nick=name[0])
         return
