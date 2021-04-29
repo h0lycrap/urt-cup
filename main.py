@@ -62,7 +62,7 @@ async def command_register(message):
         return
 
     #Check if ingame name is already taken
-    cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (args[1],))   
+    cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (args[1],))   
     if cursor.fetchone():
         await message.channel.send("In-game name already taken.")
         return
