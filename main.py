@@ -4,6 +4,7 @@ load_dotenv()
 import os
 import mariadb
 import logging
+import flag
 
 
 conn = mariadb.connect(
@@ -19,12 +20,16 @@ intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 
 role_unregistered_id = 836897738796826645
+channel_testbot_id = 834923278421721099
+
+playersInTeamCreation = []
 
 
 ###############COMMANDS########################################
 
 async def command_zmb(message):
     await message.channel.send("Va dormir Zmb.")
+    await client.change_presence(activity=discord.CustomActivity(name="Server Manager")) 
 
 async def command_lytchi(message):
     await message.channel.send("Toi aussi va dormir.")
@@ -38,9 +43,83 @@ async def command_holycrap(message):
 async def command_urt5(message):
     await message.channel.send("soon (tm)")
 
+
+
 async def command_createteam(message):
+    #Check if the user is already creating a team
+    if message.author.id in playersInTeamCreation :
+        await message.channel.send("You are already creating a team, check your dms.")
+        return
+    playersInTeamCreation.append(message.author.id)
+
+    def check(m):
+            return m.author == message.author and m.guild == None
+
     await message.channel.send("Check your dms \U0001F60F")
-    await message.author.send("Salut bg")
+
+    await message.author.send("Follow the instructions to create your team, type ``cancel`` anytime to cancel the team creation.")
+
+    name_checked = False
+    while not name_checked:
+        await message.author.send("Enter team name:")
+        teamname_msg = await client.wait_for('message', check=check)
+
+        if teamname_msg.content.lower() == 'cancel':
+            await message.author.send("Team creation canceled.")
+            playersInTeamCreation.remove(message.author.id)
+            return
+
+        #Check if team name is already taken
+        cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname_msg.content,))   
+        if cursor.fetchone():
+            await message.author.send("Team name already taken.")
+        else:
+            name_checked = True
+            
+
+        
+    tag_checked = False
+    while not tag_checked:
+        await message.author.send("Enter team tag:")
+        tag_msg = await client.wait_for('message', check=check)
+
+        if tag_msg.content.lower() == 'cancel':
+            await message.author.send("Team creation canceled.")
+            playersInTeamCreation.remove(message.author.id)
+            return
+
+        #Check if team tag is already taken
+        cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag_msg.content,))   
+        if cursor.fetchone():
+            await message.author.send("Tag already taken.")
+        else:
+            tag_checked = True
+
+    country_checked = False
+    while not country_checked:
+        await message.author.send("Enter team country (use flag emoji):")
+        country_msg = await client.wait_for('message', check=check)
+
+        if country_msg.content.lower() == 'cancel':
+            await message.author.send("Team creation canceled.")
+            playersInTeamCreation.remove(message.author.id)
+            return
+
+        cursor.execute("SELECT id FROM Countries WHERE id = %s;", (flag.dflagize(country_msg.content),))
+        if not cursor.fetchone():
+            await message.author.send("Invalid country.")
+        else:
+            country_checked = True
+
+
+    cursor.execute("INSERT INTO Teams(name, tag, country, captain) VALUES (%s, %s, %s, %s) ;", (teamname_msg.content, tag_msg.content, flag.dflagize(country_msg.content), message.author.id))
+    conn.commit()
+    await message.author.send("Team successfully created.")
+    playersInTeamCreation.remove(message.author.id)
+    testbot_channel =  discord.utils.get(message.guild.channels, id=channel_testbot_id)
+    await testbot_channel.send("New team created. Name: ``" + teamname_msg.content + '``\tTag: ``' + tag_msg.content + '``\tCountry: ' + country_msg.content + '\tCaptain: ' + f"<@{message.author.id}>", allowed_mentions=discord.AllowedMentions(users=False))
+
+
 
 async def command_register(message):
     #Check if user is already registered
@@ -129,7 +208,7 @@ async def on_member_join(member):
 @client.event
 async def on_ready():
     print("Bot online")
-    await client.change_presence(activity=discord.Game(name="Urban Terror"))    
+    await client.change_presence(activity=discord.Game(name="Server Manager"))    
 
 client.run(os.getenv('TOKEN'))
 
