@@ -46,7 +46,12 @@ async def command_urt5(message):
 
 
 async def command_createteam(message):
-    #Check if the user is already creating a team
+    # Check command validity
+    if len(message.content) > 11:
+        if message.content[11] != " ":
+            return
+
+    # Check if the user is already creating a team
     if message.author.id in playersInTeamCreation :
         await message.channel.send("You are already creating a team, check your dms.")
         return
@@ -69,7 +74,7 @@ async def command_createteam(message):
             playersInTeamCreation.remove(message.author.id)
             return
 
-        #Check if team name is already taken
+        # Check if team name is already taken
         cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname_msg.content,))   
         if cursor.fetchone():
             await message.author.send("Team name already taken.")
@@ -88,7 +93,7 @@ async def command_createteam(message):
             playersInTeamCreation.remove(message.author.id)
             return
 
-        #Check if team tag is already taken
+        # Check if team tag is already taken
         cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag_msg.content,))   
         if cursor.fetchone():
             await message.author.send("Tag already taken.")
@@ -122,47 +127,106 @@ async def command_createteam(message):
 
 
 async def command_register(message):
-    #Check if user is already registered
+
+    # Check command validity
+    if len(message.content) > 9:
+        if message.content[9] != " ":
+            return
+
+    # Check if user is already registered
     cursor.execute("SELECT urt_auth FROM Users WHERE discord_id = %s;", (message.author.id,)) 
     if cursor.fetchone():
         await message.channel.send("User already registered.")
         return
 
-    #Check if there are 2 arguments
+    # Check if there are 3 arguments
     args = message.content.split('!register')[1].strip().split(" ")
-    if len(args) != 2:
-        await message.channel.send("Please specify your urt auth and in-game name (case sensitive): \n``!register <auth> <in-game name>``")
+    if len(args) != 3:
+        await message.channel.send("Please specify your urt auth, in-game name (case sensitive) and country (use flag emoji): \n``!register <auth> <in-game name> <country>``")
         return
 
-    #Check if auth is already registered
+    # Check if auth is already registered
     cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (args[0],))   
     if cursor.fetchone():
         await message.channel.send("Auth already registered.")
         return
 
-    #Check if ingame name is already taken
+    # Check if ingame name is already taken
     cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (args[1],))   
     if cursor.fetchone():
         await message.channel.send("In-game name already taken.")
         return
 
-    #Add user to DB and remove unregistered role
-    cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name) VALUES (%s, %s, %s) ;", (message.author.id, args[0], args[1]))
+    cursor.execute("SELECT id FROM Countries WHERE id = %s;", (flag.dflagize(args[2]),))
+    if not cursor.fetchone():
+        await message.channel.send("Invalid country, please use a flag emoji.")
+        return
+
+    # Add user to DB and remove unregistered role
+    cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (message.author.id, args[0], args[1], flag.dflagize(args[2])))
     conn.commit()
     await message.channel.send("User successfully registered.")
     await message.author.remove_roles(discord.utils.get(client.guilds[0].roles, id=role_unregistered_id))
 
-    #There can be permission errors if the user's role is higher in hierarchy than the bot
+    # There can be permission errors if the user's role is higher in hierarchy than the bot
     try:
         await message.author.edit(nick=args[1])
     except Exception as e:
         pass
+
+async def command_addplayer(message):
+    # Check command validity
+    if len(message.content) > 10:
+        if message.content[10] != " ":
+            return
+
+    # Check if there are 2 arguments
+    args = message.content.split('!addplayer')[1].strip().split(" ")
+    if len(args) != 2:
+        await message.channel.send("Please specify the tag of the team you want to edit and the auth of the player you want to add: \n``!addplayer <team tag> <urt auth>``")
+        return
+
+    # Check if the tean exist
+    cursor.execute("SELECT captain, name FROM Teams WHERE tag = %s;", (args[0],)) 
+    team_toedit = cursor.fetchone()
+    if not team_toedit:
+        await message.author.send("This team does not exist.")
+        return
+
+    # Check if the user is the captain of the team
+    if team_toedit[0] != str(message.author.id):
+        await message.author.send("You are not the captain of that team.")
+        return
+
+    # Check if the auth is registered
+    cursor.execute("SELECT ingame_name, discord_id FROM Users WHERE urt_auth = %s;", (args[1],))
+    player_toadd = cursor.fetchone()
+    if not player_toadd:
+        await message.author.send("This auth is not registered yet, invite the player to join the discord server and use the ``!register`` command.")
+        return
+
+    # Add player to roster
+    cursor.execute("INSERT INTO Roster(team_name, player_name) VALUES (%s, %s) ;", (team_toedit[1], player_toadd[0]))
+    conn.commit()
+
+    # DM invite to user
+    player_topm = discord.utils.get(client.users, id=int(player_toadd[1]))
+    await player_topm.send("coucou")
+
+
+async def send_rooster_invite(message, player_topm):
+    pass
 
 
 #################EVENTS###################################
 
 @client.event
 async def on_message(message):
+    #DM commands
+    if message.guild == None and message.content.startswith('!addplayer'):
+        await command_addplayer(message)
+        return
+
     #Check if the message is a dm or if the author is the bot
     if message.guild == None or message.author == client.user:
         return
