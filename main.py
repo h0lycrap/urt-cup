@@ -21,6 +21,8 @@ client = discord.Client(intents=intents)
 
 role_unregistered_id = 836897738796826645
 channel_testbot_id = 834923278421721099
+channel_roster_id = 834931256918802512
+message_roster_id = 838119831571791912
 
 playersInTeamCreation = []
 
@@ -46,6 +48,7 @@ async def command_urt5(message):
 
 
 async def command_createteam(message):
+    # TODO: Mayve make this a 1 command only
     # Check command validity
     if len(message.content) > 11:
         if message.content[11] != " ":
@@ -61,68 +64,78 @@ async def command_createteam(message):
             return m.author == message.author and m.guild == None
 
     await message.channel.send("Check your dms \U0001F60F")
-
     await message.author.send("Follow the instructions to create your team, type ``cancel`` anytime to cancel the team creation.")
 
+    # Wait for team name and check if the team name is taken
     name_checked = False
     while not name_checked:
         await message.author.send("Enter team name:")
         teamname_msg = await client.wait_for('message', check=check)
 
-        if teamname_msg.content.lower() == 'cancel':
+        # Cancel team creation
+        if teamname_msg.content.lower().strip() == 'cancel':
             await message.author.send("Team creation canceled.")
             playersInTeamCreation.remove(message.author.id)
             return
 
-        # Check if team name is already taken
-        cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname_msg.content,))   
+        cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname_msg.content.strip(),))   
         if cursor.fetchone():
             await message.author.send("Team name already taken.")
         else:
             name_checked = True
-            
 
-        
+
+    # Wait for team tag and check if the team tag is taken    
     tag_checked = False
     while not tag_checked:
         await message.author.send("Enter team tag:")
         tag_msg = await client.wait_for('message', check=check)
 
-        if tag_msg.content.lower() == 'cancel':
+        # Cancel team creation
+        if tag_msg.content.lower().strip() == 'cancel':
             await message.author.send("Team creation canceled.")
             playersInTeamCreation.remove(message.author.id)
             return
 
-        # Check if team tag is already taken
-        cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag_msg.content,))   
+        cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag_msg.content.strip(),))   
         if cursor.fetchone():
             await message.author.send("Tag already taken.")
         else:
             tag_checked = True
 
+    # Wait for team flag and check if this is a flag emoji 
     country_checked = False
     while not country_checked:
         await message.author.send("Enter team country (use flag emoji):")
         country_msg = await client.wait_for('message', check=check)
 
-        if country_msg.content.lower() == 'cancel':
+        # Cancel team creation
+        if country_msg.content.lower().strip() == 'cancel':
             await message.author.send("Team creation canceled.")
             playersInTeamCreation.remove(message.author.id)
             return
 
-        cursor.execute("SELECT id FROM Countries WHERE id = %s;", (flag.dflagize(country_msg.content),))
+        cursor.execute("SELECT id FROM Countries WHERE id = %s;", (flag.dflagize(country_msg.content.strip()),))
         if not cursor.fetchone():
             await message.author.send("Invalid country.")
         else:
             country_checked = True
 
-
-    cursor.execute("INSERT INTO Teams(name, tag, country, captain) VALUES (%s, %s, %s, %s) ;", (teamname_msg.content, tag_msg.content, flag.dflagize(country_msg.content), message.author.id))
+    # Add team to DB
+    cursor.execute("INSERT INTO Teams(name, tag, country, captain) VALUES (%s, %s, %s, %s) ;", (teamname_msg.content.strip(), tag_msg.content.strip(), flag.dflagize(country_msg.content.strip()), message.author.id))
     conn.commit()
+
+    # Add captain to team roster accepted=2 means captain
+    captain = discord.utils.get(client.guilds[0].members, id=int(message.author.id))
+    cursor.execute("INSERT INTO Roster(team_name, player_name, accepted) VALUES (%s, %s, %d) ;", (teamname_msg.content.strip(), captain.nick, 2))
+    conn.commit()
+
     await message.author.send("Team successfully created.")
     playersInTeamCreation.remove(message.author.id)
+
+    # Print on the log channel
     testbot_channel =  discord.utils.get(message.guild.channels, id=channel_testbot_id)
-    await testbot_channel.send("New team created. Name: ``" + teamname_msg.content + '``\tTag: ``' + tag_msg.content + '``\tCountry: ' + country_msg.content + '\tCaptain: ' + f"<@{message.author.id}>", allowed_mentions=discord.AllowedMentions(users=False))
+    await testbot_channel.send("New team created. Name: ``" + teamname_msg.content.strip() + '``\tTag: ``' + tag_msg.content.strip() + '``\tCountry: ' + country_msg.content.strip() + '\tCaptain: ' + f"<@{message.author.id}>", allowed_mentions=discord.AllowedMentions(users=False))
 
 
 
@@ -140,7 +153,7 @@ async def command_register(message):
         return
 
     # Check if there are 3 arguments
-    args = message.content.split('!register')[1].strip().split(" ")
+    args = message.content.split('!register')[1].strip().split()
     if len(args) != 3:
         await message.channel.send("Please specify your urt auth, in-game name (case sensitive) and country (use flag emoji): \n``!register <auth> <in-game name> <country>``")
         return
@@ -174,14 +187,14 @@ async def command_register(message):
     except Exception as e:
         pass
 
-async def command_addplayer(message):
+async def command_addplayer(message): #TODO: Check DB checks if a player was already invited
     # Check command validity
     if len(message.content) > 10:
         if message.content[10] != " ":
             return
 
     # Check if there are 2 arguments
-    args = message.content.split('!addplayer')[1].strip().split(" ")
+    args = message.content.split('!addplayer')[1].strip().split()
     if len(args) != 2:
         await message.channel.send("Please specify the tag of the team you want to edit and the auth of the player you want to add: \n``!addplayer <team tag> <urt auth>``")
         return
@@ -205,17 +218,68 @@ async def command_addplayer(message):
         await message.author.send("This auth is not registered yet, invite the player to join the discord server and use the ``!register`` command.")
         return
 
+    # Check if user was already invited
+    cursor.execute("SELECT id FROM Roster WHERE team_name = %s AND player_name=%s;", (team_toedit[1], player_toadd[0]))
+    debug = cursor.fetchone()
+    if cursor.fetchone():
+        print(debug)
+        await message.author.send("This player was already invited to that team.")
+        return
+
     # Add player to roster
     cursor.execute("INSERT INTO Roster(team_name, player_name) VALUES (%s, %s) ;", (team_toedit[1], player_toadd[0]))
     conn.commit()
+    await message.author.send(f"Invitation sent to ``{player_toadd[0]}``.")
 
     # DM invite to user
     player_topm = discord.utils.get(client.users, id=int(player_toadd[1]))
-    await player_topm.send("coucou")
+    captain = discord.utils.get(client.guilds[0].members, id=int(message.author.id)) # Assuming the bot is only on 1 server
+    captain_name = captain.nick
+    if captain.nick == None:
+        captain_name = captain.display_name
+
+    invite_message = await player_topm.send(f"``{captain_name}`` invites you to join his team ``{team_toedit[1]}``. React to this message to accept or decline.")
+    await invite_message.add_reaction(u"\U00002705")
+    await invite_message.add_reaction(u"\U0000274C")
+
+    # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
+    def check(reaction, user):
+            return user.id != client.user.id and reaction.message == invite_message and (str(reaction.emoji) == u"\U00002705" or str(reaction.emoji) == u"\U0000274C")
+    reaction, _ = await client.wait_for('reaction_add', check=check)
+
+    # Accepted invite
+    if str(reaction.emoji) == u"\U00002705":
+        await captain.send(f"``{player_toadd[0]}`` accepted your invite to join your team ``{team_toedit[1]}``.")
+        cursor.execute("UPDATE Roster SET accepted=1 WHERE  team_name = %s AND player_name=%s;", (team_toedit[1], player_toadd[0]))
+        conn.commit()
+        await player_topm.send(f"You are now in the team ``{team_toedit[1]}``.")
+
+        await UpdateRoster()
+
+    # Declined invite
+    elif str(reaction.emoji) == u"\U0000274C":
+        await captain.send(f"``{player_toadd[0]}`` declined your invite to join your team ``{team_toedit[1]}``.")
+        cursor.execute("DELETE FROM Roster WHERE  team_name = %s AND player_name=%s;", (team_toedit[1], player_toadd[0]))
+        conn.commit()
+        await player_topm.send(f"You declined the invitation to join team ``{team_toedit[1]}``.")
 
 
-async def send_rooster_invite(message, player_topm):
-    pass
+async def UpdateRoster():
+    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) # Assuming the bot is on 1 server only
+    roster_message = await roster_channel.fetch_message(message_roster_id)
+    newRoster = ''
+
+    cursor.execute("SELECT name FROM Teams;")
+    for team in cursor.fetchall():
+        cursor.execute("SELECT player_name FROM Roster WHERE team_name = %s;", (team[0],))
+        players = cursor.fetchall()
+        if players:
+            for player in players:
+                newRoster += f"Team: {team[0]}      Player: {player[0]}\n"
+
+    await roster_message.edit(content=newRoster)
+
+    
 
 
 #################EVENTS###################################
@@ -272,7 +336,9 @@ async def on_member_join(member):
 @client.event
 async def on_ready():
     print("Bot online")
-    await client.change_presence(activity=discord.Game(name="Server Manager"))    
+    await client.change_presence(activity=discord.Game(name="Server Manager")) 
+
+
 
 client.run(os.getenv('TOKEN'))
 
