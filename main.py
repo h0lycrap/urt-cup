@@ -22,6 +22,7 @@ intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 
 role_unregistered_id = 836897738796826645
+role_captains_id = 839893529517228113
 channel_testbot_id = 834923278421721099
 channel_roster_id = 834931256918802512
 message_welcome_id = 838861660805791825
@@ -32,7 +33,10 @@ max_players_per_team = 12
 ###############COMMANDS########################################
 
 async def command_zmb(message):
-    await message.channel.send("Va dormir Zmb.")
+    zmb = discord.utils.get(client.guilds[0].members, id=205821831964393472)
+    embed=discord.Embed(title="Va dormir Zmb", color=0x9b2ab2)
+    embed.set_thumbnail(url=zmb.avatar_url)
+    await message.channel.send(embed=embed)
     await client.change_presence(activity=discord.CustomActivity(name="Server Manager")) 
 
 async def command_lytchi(message):
@@ -168,12 +172,17 @@ async def command_createclan(message):
         else:
             country_checked = True
 
+    # Create team ds role
+    team_role = await client.guilds[0].create_role(name=tag_msg.content.strip())
+
     # Add team to DB
-    cursor.execute("INSERT INTO Teams(name, tag, country, captain) VALUES (%s, %s, %s, %s) ;", (teamname_msg.content.strip(), tag_msg.content.strip(), flag.dflagize(country_msg.content.strip()), message.author.id))
+    cursor.execute("INSERT INTO Teams(name, tag, country, captain, role_id) VALUES (%s, %s, %s, %s, %s) ;", (teamname_msg.content.strip(), tag_msg.content.strip(), flag.dflagize(country_msg.content.strip()), message.author.id, team_role.id))
     conn.commit()
 
     # Add captain to team roster accepted=2 means captain
     captain = discord.utils.get(client.guilds[0].members, id=int(message.author.id))
+    captain_role = discord.utils.get(client.guilds[0].roles, id=int(role_captains_id))
+    await captain.add_roles(captain_role, team_role)
     cursor.execute("INSERT INTO Roster(team_tag, player_name, accepted) VALUES (%s, %s, %d) ;", (tag_msg.content.strip(), captain.display_name, 2))
     conn.commit()
 
@@ -205,7 +214,7 @@ async def command_editclan(message):
             return
 
         # Check if the tean exist
-        cursor.execute("SELECT captain, tag, name FROM Teams WHERE tag = %s;", (tag_msg.content.strip(),)) 
+        cursor.execute("SELECT captain, tag, name, role_id FROM Teams WHERE tag = %s;", (tag_msg.content.strip(),)) 
         team_toedit = cursor.fetchone()
         if not team_toedit:
             await message.author.send("This clan tag does not exist.")
@@ -307,7 +316,7 @@ async def Addplayer(team_toedit, user):
     conn.commit() 
 
     # DM invite to user
-    player_topm = discord.utils.get(client.users, id=int(player_toadd[1]))
+    player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toadd[1]))
     captain = discord.utils.get(client.guilds[0].members, id=int(user.id)) # Assuming the bot is only on 1 server
 
     invite_message = await player_topm.send(f"``{captain.display_name}`` invites you to join his clan ``{team_toedit[2]}``. React to this message to accept or decline.")
@@ -328,6 +337,10 @@ async def Addplayer(team_toedit, user):
         conn.commit()
         await player_topm.send(f"You are now in the clan ``{team_toedit[2]}``.")
         await UpdateRoster()
+
+        # Add team role to player
+        team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit[3]))
+        await player_topm.add_roles(team_role)
 
     # Declined invite
     elif str(reaction.emoji) == u"\U0000274C":
@@ -381,8 +394,12 @@ async def Deleteplayer(team_toedit, user):
     await UpdateRoster()
     await user.send(f"The player ``{player_toremove[0]}`` has been removed from this clan.")
 
+    # Remove team role from player
+    player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toremove[1]))
+    team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit[3]))
+    await player_topm.remove_roles(team_role)
+
     # Notify removed user
-    player_topm = discord.utils.get(client.users, id=int(player_toremove[1]))
     await player_topm.send(f"You have been removed from the clan ``{team_toedit[2]}``.")
 
 
@@ -503,6 +520,13 @@ async def DeleteTeam(team_toedit, user):
             except:
                 pass
 
+            # Delete team role
+            try:
+                team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit[3]))
+                await team_role.delete()
+            except Exception as e:
+                print(e)
+
             # Delete clan
             cursor.execute("DELETE FROM Teams WHERE tag = %s;", (team_toedit[1],))
             conn.commit()
@@ -510,6 +534,13 @@ async def DeleteTeam(team_toedit, user):
             # Delete from roster
             cursor.execute("DELETE FROM Roster WHERE team_tag = %s;", (team_toedit[1],))
             conn.commit()
+
+            # Remove captain role if the captain is no longer captain of any team
+            prev_captain = discord.utils.get(client.guilds[0].members, id=int(user.id))
+            captain_role = discord.utils.get(client.guilds[0].roles, id=int(role_captains_id))
+            cursor.execute("SELECT id FROM Roster WHERE accepted=2 AND player_name=%s", (prev_captain.display_name,))
+            if not cursor.fetchone():
+                await prev_captain.remove_roles(captain_role)
 
             # Notify
             await user.send(f"The clan ``{team_toedit[2]}`` has been deleted.")
@@ -587,9 +618,6 @@ async def UpdateRoster():
 
             counter += 1 
 
-                
-        #newRoster += "-" * line_width + '\n'
-
         # Check if there is a message id stored
         new_roster_msg = False
         try:
@@ -602,7 +630,31 @@ async def UpdateRoster():
             cursor.execute("UPDATE Teams SET roster_message_id=%s WHERE tag=%s", (str(new_roster_msg.id), team[0]))
             conn.commit()
 
-    
+async def command_createcup(message):
+    # Check command validity
+    if len(message.content) > len("!createcup"):
+        if message.content[len("!createcup")] != " ":
+            return
+
+    # Check args
+    args = message.content[len("!createcup"):].split()
+    if len(args) != 2:
+        await message.channel.send("Please specify use the command as following: ``!createcup <name> <number of teams>``")
+    try:
+        int(args[1])
+    except:
+        await message.channel.send("Please specify use the command as following: ``!createcup <name> <number of teams>``")
+
+    signup_msg_content_title = "                     :small_orange_diamond: **Signup List** :small_orange_diamond:\n\n"
+    signup_msg_content = "~\n" + signup_msg_content_title
+    signup_msg_content += "  __N__                        __Teams__                        __Tag__\n\n"
+    for i in range(1, int(args[1])+1):
+        index_string = str(i) + "."
+        signup_msg_content += f"``{index_string.ljust(3)}``  :black_small_square: :flag_white: ``            `` :black_small_square: ``       ``\n\n"
+
+    # TODO: Refactor the signup channel identification 
+    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
+    signup_msg = await signup_channel.send(signup_msg_content)
 
 
 #################EVENTS###################################
@@ -646,6 +698,10 @@ async def on_message(message):
         await command_register(message)
         return
 
+    if message.content.startswith('!createcup'):
+        await command_createcup(message)
+        return
+
 @client.event
 async def on_member_join(member):
     #Check if user is already registered and rename them if yes
@@ -674,8 +730,15 @@ async def on_raw_reaction_add(payload):
 async def on_ready():
     print("Bot online")
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
-
+    print(client.guilds[0].members)
     await UpdateRoster()
+
+    embed=discord.Embed(title="Team Signup", color=0x9b2ab2)
+    embed.add_field(name="N", value="\n1\n\n2\n\n3\n\n4\n\n5", inline=True)
+    embed.add_field(name="Team", value="\n:flag_fr: Anal Destruction Nuclear \n\n:flag_fr: No Way \n\n:flag_fr: GROM \n\n:flag_fr: Team France \n\n:flag_fr: Holy Team", inline=True)
+    embed.add_field(name="Tag", value="\nadn\` \n\nnow\` \n\nGROM\* \n\n.fr \n\n.hlcrp", inline=True)
+    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
+    signup_msg = await signup_channel.send(embed=embed)
 
 
 
