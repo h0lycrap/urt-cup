@@ -548,85 +548,117 @@ async def DeleteTeam(team_toedit, user):
             return
 
 
+def GenerateTeamEmbed(team):
+    mini_number_players = 5
+     # Get the players for each team
+    cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (team[0],))
+    players = cursor.fetchall()
+
+    # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
+    accepted_players = list(filter(lambda x: x[1] != 0, players))
+
+    # Generate roster body
+    roster_str1 = ""
+    roster_str2 = "\u200b"
+    for i, player in enumerate(accepted_players):
+
+        # Get player country flag and urt auth
+        cursor.execute("SELECT urt_auth, country FROM Users WHERE ingame_name = %s;", (player[0],))
+        player_info = cursor.fetchone()
+        if not player_info:
+            player_auth_str = "urtauth"
+            player_flag_str = ":FR:"
+        else:
+            player_auth_str = player_info[0]
+            player_flag_str = player_info[1]
+
+        player_string = f"{flag.flagize(player_flag_str)} {player[0]} ``[{player_auth_str}]``\n"
+        # Check if we add in the first column or the second one
+        if i <= 3 or len(accepted_players) < mini_number_players:
+            roster_str1 += player_string
+        else:
+            roster_str2 += player_string
+
+    # Create embed
+    captain = discord.utils.get(client.guilds[0].members, id=int(team[2]))
+    embed=discord.Embed(title=f"{team[4]} {flag.flagize(team[1])}", color=13695009)
+    embed.add_field(name=f"**Captain: **{captain.display_name}     |     **Tag: **{team[0]}", value= "\u200b", inline=False)
+    embed.add_field(name="Members [auth] ", value= roster_str1, inline=True)
+    embed.add_field(name="\u200b", value=roster_str2, inline=True)
+    embed.add_field(name="Inactives", value=".", inline=False)
+    embed.add_field(name="Discord", value="https://discord.gg/HzkvFEs", inline=True) # Hardcoded for now
+    embed.add_field(name="Awards", value=":first_place: :second_place: :third_place:", inline=True) # Hardcoded for now
+
+    return embed, len(accepted_players) < mini_number_players
+
+def GeneratePlayerEmbed(player):
+    # player[0]: discord id | player[1]: auth | player[2]: in game name | player[3]: country
+    ds_player = discord.utils.get(client.guilds[0].members, id=int(player[0]))
+    embed=discord.Embed(title=f"{flag.flagize(player[3])} \u200b {player[2]}", color=0x9b2ab2)
+    embed.add_field(name="Auth", value= player[1], inline=False)
+    embed.set_thumbnail(url=ds_player.avatar_url)
+
+    # Get player's teams
+    cursor.execute("SELECT team_tag, accepted FROM Roster WHERE player_name=%s", (player[2],))
+    teams = cursor.fetchall()
+
+    # If the player is in no team
+    if not teams:
+        teams_str="."
+
+    else:
+        teams_str=""
+        for team in teams:
+            # Get team country
+            cursor.execute("SELECT country FROM Teams WHERE tag=%s", (team[0],))
+            country = cursor.fetchone()
+
+            # If he is a member of the team
+            if int(team[1]) == 1:
+                teams_str += f"{flag.flagize(country[0])} \u200b {team[0]}\n"
+
+            # If he is the captain of the team
+            elif int(team[1]) == 2:
+                teams_str += f"{flag.flagize(country[0])} \u200b {team[0]} (Captain)\n"
+
+            # If he is inactive
+            elif int(team[1]) == 3:
+                teams_str += f"{flag.flagize(country[0])} \u200b {team[0]} (Inactive)\n" 
+
+    embed.add_field(name="Clans", value= teams_str, inline=True)
+
+    return embed
+
+
+
 
 async def UpdateRoster():
-    # Formatting variables 
-    line_width = 80
-    player_line_width = 15
-    players_per_line = 3
-    space_before_title = 44
-    mini_number_players = 5
-
     # Get channel
     roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) # Assuming the bot is on 1 server only
 
-    cursor.execute("SELECT tag, country, captain, roster_message_id FROM Teams;")
-    for team in cursor.fetchall():
-        # Init new message
-        newRoster = "-" * line_width  + '\n'
-        
-        # Get the players for each team
-        cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (team[0],))
-        players = cursor.fetchall()
+    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams;")
+    for team in cursor.fetchall():  
 
-        # Check if there are any player in the team
-        if not players:
-            continue
+        # Generate the embed
+        embed, insuficient_roster = GenerateTeamEmbed(team)
 
-        # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
-        accepted_players = list(filter(lambda x: x[1] != 0, players))
-        if len(accepted_players) < mini_number_players:
-
+        if insuficient_roster:
             # Remove message from roster if there was one
             try:
                 roster_message = await roster_channel.fetch_message(team[3])
                 await roster_message.delete()
             except:
                 pass
-
             continue
 
-        # Generate first line of roster: team tag and flag
-        team_title = u"\U0001F538  " + flag.flagize(team[1]) + "   **" + team[0] + "**" + u"  \U0001F538"
-        newRoster += " " * space_before_title +  team_title.center(30) + '\n\n'
-    
-        # Generate second line of roster: captain
-        captain = discord.utils.get(client.guilds[0].members, id=int(team[2]))
-        captain_string = "Captain: ``" + captain.display_name + "``"
-        newRoster += " " * space_before_title + captain_string.center(30) + '\n'
-
-        # Generate roster body
-        counter = 1
-        player_string = ""
-        for player in accepted_players:
-
-            # Get player country flag
-            cursor.execute("SELECT country FROM Users WHERE ingame_name = %s;", (player[0],))
-            player_flag = cursor.fetchone()
-            if not player_flag:
-                player_flag_str = ":FR:"
-            else:
-                player_flag_str = player_flag[0]
-            player_string += flag.flagize(player_flag_str) +  ' `` ' + player[0] + " " * (player_line_width-len(player[0])) + '``' 
-
-            # Check if we are at the end of line
-            if counter % players_per_line == 0 or counter == len(accepted_players):
-                newRoster += player_string +  "\n"
-                player_string = ""
-            else:
-                player_string += "  "
-
-            counter += 1 
-
         # Check if there is a message id stored
-        new_roster_msg = False
         try:
             roster_message = await roster_channel.fetch_message(team[3])
-            await roster_message.edit(content=newRoster)
+            await roster_message.edit(embed=embed)
         except:
 
             # Send new message and store message id
-            new_roster_msg = await roster_channel.send(newRoster)
+            new_roster_msg = await roster_channel.send(embed=embed)
             cursor.execute("UPDATE Teams SET roster_message_id=%s WHERE tag=%s", (str(new_roster_msg.id), team[0]))
             conn.commit()
 
@@ -639,11 +671,11 @@ async def command_createcup(message):
     # Check args
     args = message.content[len("!createcup"):].split()
     if len(args) != 2:
-        await message.channel.send("Please specify use the command as following: ``!createcup <name> <number of teams>``")
+        await message.channel.send("Please use the command as following: ``!createcup <name> <number of teams>``")
     try:
         int(args[1])
     except:
-        await message.channel.send("Please specify use the command as following: ``!createcup <name> <number of teams>``")
+        await message.channel.send("Please use the command as following: ``!createcup <name> <number of teams>``")
 
     signup_msg_content_title = "                     :small_orange_diamond: **Signup List** :small_orange_diamond:\n\n"
     signup_msg_content = "~\n" + signup_msg_content_title
@@ -655,6 +687,84 @@ async def command_createcup(message):
     # TODO: Refactor the signup channel identification 
     signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
     signup_msg = await signup_channel.send(signup_msg_content)
+
+async def command_teaminfo(message):
+    # Check command validity
+    if len(message.content) > len("!teaminfo"):
+        if message.content[len("!teaminfo")] != " ":
+            return
+
+    # Check args
+    args = message.content[len("!teaminfo"):].split()
+    if len(args) != 1:
+        if message.guild == None:
+            await message.author.send("Please use the command as following: ``!teaminfo <team_tag>``")
+            return
+        await message.channel.send("Please use the command as following: ``!teaminfo <team_tag>``")
+        return
+
+    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams WHERE tag=%s;", (args[0],))
+    team = cursor.fetchone()
+
+    if not team:
+        if message.guild == None:
+            await message.author.send("This team does not exist.")
+            return
+        await message.channel.send("This team does not exist.")
+        return
+
+    embed, _ = GenerateTeamEmbed(team)
+
+    # Send to author if this was in dm 
+    if message.guild == None:
+        await message.author.send(embed=embed)
+        return
+
+    await message.channel.send(embed=embed)
+
+async def command_whois(message):
+    # Check command validity
+    if len(message.content) > len("!whois"):
+        if message.content[len("!whois")] != " ":
+            return
+
+    # Check args
+    args = message.content[len("!whois"):].split()
+    if len(args) != 1:
+        if message.guild == None:
+            await message.author.send("Please use the command as following: ``!whois <player>``")
+            return
+        await message.channel.send("Please use the command as following: ``!whois <player>``")
+        return
+
+    # Check if this is a mention and extract user id
+    if args[0].startswith("<@!") and args[0].endswith(">"):
+        args[0] = args[0][3:-1] 
+        print(args[0])
+
+    cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args[0], args[0], args[0]))
+    players_matching = cursor.fetchall()
+    if not players_matching:
+        if message.guild == None:
+            await message.author.send("This user does not exist or is not registered yet.")
+            return
+        await message.channel.send("This user does not exist or is not registered yet.")
+        return
+
+    # For the small corner case if there is 1 player's in game name is equal the 1 other player auth print them both
+    for player in players_matching:
+        embed = GeneratePlayerEmbed(player)
+
+        # Send to author if this was in dm 
+        if message.guild == None:
+            await message.author.send(embed=embed)
+            return
+
+        await message.channel.send(embed=embed)
+
+
+
+
 
 
 #################EVENTS###################################
@@ -668,6 +778,14 @@ async def on_message(message):
 
     if message.guild == None and message.content.startswith('!createclan'):
         await command_createclan(message)
+        return
+
+    if message.content.startswith('!teaminfo'):
+        await command_teaminfo(message)
+        return
+
+    if message.content.startswith('!whois'):
+        await command_whois(message)
         return
 
     #Check if the message is a dm or if the author is the bot
@@ -730,15 +848,16 @@ async def on_raw_reaction_add(payload):
 async def on_ready():
     print("Bot online")
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
-    print(client.guilds[0].members)
     await UpdateRoster()
 
+    """
     embed=discord.Embed(title="Team Signup", color=0x9b2ab2)
     embed.add_field(name="N", value="\n1\n\n2\n\n3\n\n4\n\n5", inline=True)
     embed.add_field(name="Team", value="\n:flag_fr: Anal Destruction Nuclear \n\n:flag_fr: No Way \n\n:flag_fr: GROM \n\n:flag_fr: Team France \n\n:flag_fr: Holy Team", inline=True)
     embed.add_field(name="Tag", value="\nadn\` \n\nnow\` \n\nGROM\* \n\n.fr \n\n.hlcrp", inline=True)
     signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
     signup_msg = await signup_channel.send(embed=embed)
+    """
 
 
 
