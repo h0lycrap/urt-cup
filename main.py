@@ -688,32 +688,43 @@ async def command_createcup(message):
     signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
     signup_msg = await signup_channel.send(signup_msg_content)
 
-async def command_teaminfo(message):
+async def command_info(message):
     # Check command validity
-    if len(message.content) > len("!teaminfo"):
-        if message.content[len("!teaminfo")] != " ":
+    if len(message.content) > len("!info"):
+        if message.content[len("!info")] != " ":
             return
 
     # Check args
-    args = message.content[len("!teaminfo"):].split()
+    args = message.content[len("!info"):].split()
     if len(args) != 1:
         if message.guild == None:
-            await message.author.send("Please use the command as following: ``!teaminfo <team_tag>``")
+            await message.author.send("Please use the command as following: ``!info <player/team_tag>``")
             return
-        await message.channel.send("Please use the command as following: ``!teaminfo <team_tag>``")
+        await message.channel.send("Please use the command as following: ``!info <player/team_tag>``")
         return
+
+    # Check if this is a mention and extract user id
+    if args[0].startswith("<@!") and args[0].endswith(">"):
+        args[0] = args[0][3:-1] 
 
     cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams WHERE tag=%s;", (args[0],))
     team = cursor.fetchone()
 
-    if not team:
+    cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args[0], args[0], args[0]))
+    player = cursor.fetchone()
+
+    if not team and not player:
         if message.guild == None:
-            await message.author.send("This team does not exist.")
+            await message.author.send("This team/player does not exist or is not registered.")
             return
-        await message.channel.send("This team does not exist.")
+        await message.channel.send("This team/player does not exist or is not registered.")
         return
 
-    embed, _ = GenerateTeamEmbed(team)
+    if team:
+        embed, _ = GenerateTeamEmbed(team)
+
+    elif player:
+        embed = GeneratePlayerEmbed(player)
 
     # Send to author if this was in dm 
     if message.guild == None:
@@ -721,47 +732,6 @@ async def command_teaminfo(message):
         return
 
     await message.channel.send(embed=embed)
-
-async def command_whois(message):
-    # Check command validity
-    if len(message.content) > len("!whois"):
-        if message.content[len("!whois")] != " ":
-            return
-
-    # Check args
-    args = message.content[len("!whois"):].split()
-    if len(args) != 1:
-        if message.guild == None:
-            await message.author.send("Please use the command as following: ``!whois <player>``")
-            return
-        await message.channel.send("Please use the command as following: ``!whois <player>``")
-        return
-
-    # Check if this is a mention and extract user id
-    if args[0].startswith("<@!") and args[0].endswith(">"):
-        args[0] = args[0][3:-1] 
-        print(args[0])
-
-    cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args[0], args[0], args[0]))
-    players_matching = cursor.fetchall()
-    if not players_matching:
-        if message.guild == None:
-            await message.author.send("This user does not exist or is not registered yet.")
-            return
-        await message.channel.send("This user does not exist or is not registered yet.")
-        return
-
-    # For the small corner case if there is 1 player's in game name is equal the 1 other player auth print them both
-    for player in players_matching:
-        embed = GeneratePlayerEmbed(player)
-
-        # Send to author if this was in dm 
-        if message.guild == None:
-            await message.author.send(embed=embed)
-            return
-
-        await message.channel.send(embed=embed)
-
 
 
 
@@ -780,18 +750,16 @@ async def on_message(message):
         await command_createclan(message)
         return
 
-    if message.content.startswith('!teaminfo'):
-        await command_teaminfo(message)
-        return
-
-    if message.content.startswith('!whois'):
-        await command_whois(message)
+    # DM and guild commands
+    if message.content.startswith('!info'):
+        await command_info(message)
         return
 
     #Check if the message is a dm or if the author is the bot
     if message.guild == None or message.author == client.user:
         return
 
+    # Guild only commands
     if message.content.startswith('!zmb'):
         await command_zmb(message)
         return
@@ -849,17 +817,6 @@ async def on_ready():
     print("Bot online")
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
     await UpdateRoster()
-
-    """
-    embed=discord.Embed(title="Team Signup", color=0x9b2ab2)
-    embed.add_field(name="N", value="\n1\n\n2\n\n3\n\n4\n\n5", inline=True)
-    embed.add_field(name="Team", value="\n:flag_fr: Anal Destruction Nuclear \n\n:flag_fr: No Way \n\n:flag_fr: GROM \n\n:flag_fr: Team France \n\n:flag_fr: Holy Team", inline=True)
-    embed.add_field(name="Tag", value="\nadn\` \n\nnow\` \n\nGROM\* \n\n.fr \n\n.hlcrp", inline=True)
-    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
-    signup_msg = await signup_channel.send(embed=embed)
-    """
-
-
 
 client.run(os.getenv('TOKEN'))
 
