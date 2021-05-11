@@ -7,6 +7,7 @@ import logging
 import flag
 import random
 import string
+import requests
 
 
 conn = mariadb.connect(
@@ -60,15 +61,26 @@ async def Register(user):
     # Wait for team name and check if the team name is taken
     auth_checked = False
     while not auth_checked:
-        await user.send("Enter team urt_auth:")
+        await user.send("Enter your urt auth:")
         auth_msg = await client.wait_for('message', check=check)
 
         # Check if auth is already registered
         cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth_msg.content.strip(),))   
         if cursor.fetchone():
             await user.send("Auth already registered.")
-        else:
-            auth_checked = True
+            continue
+        
+        if not auth_msg.content.strip().isalnum():
+            await user.send("Invalid auth.")
+            continue
+
+        login_search = requests.get(f"https://www.urbanterror.info/members/profile/{auth_msg.content.strip()}/")
+
+        if "No member with the login or id" in  login_search.text:
+            await user.send("This auth does not exist.")
+            continue
+
+        auth_checked = True
 
 
     name_checked = False
@@ -213,8 +225,9 @@ async def command_editclan(message):
             await message.author.send("Clan edit canceled.")
             return
 
-        # Check if the tean exist
-        cursor.execute("SELECT captain, tag, name, role_id FROM Teams WHERE tag = %s;", (tag_msg.content.strip(),)) 
+        # Check if the tean exist3
+        # tag, country, captain, roster_message_id, name
+        cursor.execute("SELECT captain, tag, name, role_id, country FROM Teams WHERE tag = %s;", (tag_msg.content.strip(),)) 
         team_toedit = cursor.fetchone()
         if not team_toedit:
             await message.author.send("This clan tag does not exist.")
@@ -227,8 +240,10 @@ async def command_editclan(message):
 
         tag_checked = True
 
+    embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
     # Wait for the choice 
-    await message.author.send("Here are the options to edit your clan, enter the corresponding number to proceed, type ``!cancel`` anytime to cancel: \n**1.** Add a player to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ")
+    await message.author.send(embed = embed)
+    await message.author.send(content="Here are the options to edit your clan, enter the corresponding number to proceed, type ``!cancel`` anytime to cancel: \n**1.** Add a player to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ")
     option_checked = False
     while not option_checked:
         await message.author.send("Choice number:")
@@ -325,6 +340,10 @@ async def Addplayer(team_toedit, user):
 
     await user.send(f"Invitation sent to ``{player_toadd[0]}``.")  
 
+    # Show updated roster
+    embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
+    await user.send(embed = embed)
+
     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
     def check(reaction, user):
             return user.id != client.user.id and reaction.message == invite_message and (str(reaction.emoji) == u"\U00002705" or str(reaction.emoji) == u"\U0000274C")
@@ -332,9 +351,15 @@ async def Addplayer(team_toedit, user):
 
     # Accepted invite
     if str(reaction.emoji) == u"\U00002705":
-        await captain.send(f"``{player_toadd[0]}`` accepted your invite to join your clan ``{team_toedit[2]}``.")
         cursor.execute("UPDATE Roster SET accepted=1 WHERE  team_tag = %s AND player_name=%s;", (team_toedit[1], player_toadd[0]))
         conn.commit()
+
+        await captain.send(f"``{player_toadd[0]}`` accepted your invite to join your clan ``{team_toedit[2]}``.")
+
+        # Show updated roster
+        embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
+        await captain.send(embed = embed)
+
         await player_topm.send(f"You are now in the clan ``{team_toedit[2]}``.")
         await UpdateRoster()
 
@@ -394,6 +419,11 @@ async def Deleteplayer(team_toedit, user):
     await UpdateRoster()
     await user.send(f"The player ``{player_toremove[0]}`` has been removed from this clan.")
 
+    # Show updated roster
+    embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
+    await user.send(embed = embed)
+
+
     # Remove team role from player
     player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toremove[1]))
     team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit[3]))
@@ -429,6 +459,10 @@ async def UpdateTeamFlag(team_toedit, user):
     await UpdateRoster();
 
     await user.send("Clan flag updated.")
+
+    # Show updated roster
+    embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
+    await user.send(embed = embed)
 
 async def ChangeClanCaptain(team_toedit, user):
 
@@ -481,6 +515,10 @@ async def ChangeClanCaptain(team_toedit, user):
 
     await UpdateRoster()
     await user.send(f"The player ``{new_captain[0]}`` is now the captain of this clan.")
+
+    # Show updated roster
+    embed, _ = GenerateTeamEmbed(tag=team_toedit[1], show_invited=True)
+    await user.send(embed = embed)
 
     # Notify new captain
     player_topm = discord.utils.get(client.users, id=int(new_captain[1]))
@@ -548,18 +586,30 @@ async def DeleteTeam(team_toedit, user):
             return
 
 
-def GenerateTeamEmbed(team):
+def GenerateTeamEmbed(tag, show_invited=False):
     mini_number_players = 5
+
+    # Get the team info
+    cursor.execute("SELECT country, captain, name FROM Teams WHERE tag=%s;", (tag,))
+    team = cursor.fetchone()
+    country = team[0]
+    captain = team[1]
+    name = team[2]
+
      # Get the players for each team
-    cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (team[0],))
+    cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (tag,))
     players = cursor.fetchall()
 
     # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
     accepted_players = list(filter(lambda x: x[1] != 0, players))
 
+    # Get the list of invited players
+    invited_players = list(filter(lambda x: x[1] == 0, players))
+
     # Generate roster body
     roster_str1 = ""
     roster_str2 = "\u200b"
+    roster_invited = ""
     for i, player in enumerate(accepted_players):
 
         # Get player country flag and urt auth
@@ -579,12 +629,28 @@ def GenerateTeamEmbed(team):
         else:
             roster_str2 += player_string
 
+    # Invited players loop
+    for i, player in enumerate(invited_players):
+        # Get player country flag and urt auth
+        cursor.execute("SELECT urt_auth, country FROM Users WHERE ingame_name = %s;", (player[0],))
+        player_info = cursor.fetchone()
+        if not player_info:
+            player_auth_str = "urtauth"
+            player_flag_str = ":FR:"
+        else:
+            player_auth_str = player_info[0]
+            player_flag_str = player_info[1]
+
+        roster_invited += f"{flag.flagize(player_flag_str)} {player[0]} ``[{player_auth_str}]``\n"
+
     # Create embed
-    captain = discord.utils.get(client.guilds[0].members, id=int(team[2]))
-    embed=discord.Embed(title=f"{team[4]} {flag.flagize(team[1])}", color=13695009)
-    embed.add_field(name=f"**Captain: **{captain.display_name}     |     **Tag: **{team[0]}", value= "\u200b", inline=False)
+    captain = discord.utils.get(client.guilds[0].members, id=int(captain))
+    embed=discord.Embed(title=f"{name} {flag.flagize(country)}", color=13695009)
+    embed.add_field(name=f"**Captain: **{captain.display_name}     |     **Tag: **{tag}", value= "\u200b", inline=False)
     embed.add_field(name="Members [auth] ", value= roster_str1, inline=True)
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
+    if show_invited and roster_invited != "":
+        embed.add_field(name="Invited", value=roster_invited, inline=False)
     embed.add_field(name="Inactives", value=".", inline=False)
     embed.add_field(name="Discord", value="https://discord.gg/HzkvFEs", inline=True) # Hardcoded for now
     embed.add_field(name="Awards", value=":first_place: :second_place: :third_place:", inline=True) # Hardcoded for now
@@ -640,7 +706,7 @@ async def UpdateRoster():
     for team in cursor.fetchall():  
 
         # Generate the embed
-        embed, insuficient_roster = GenerateTeamEmbed(team)
+        embed, insuficient_roster = GenerateTeamEmbed(tag=team[0])
 
         if insuficient_roster:
             # Remove message from roster if there was one
@@ -721,7 +787,7 @@ async def command_info(message):
         return
 
     if team:
-        embed, _ = GenerateTeamEmbed(team)
+        embed, _ = GenerateTeamEmbed(tag=team[0])
 
     elif player:
         embed = GeneratePlayerEmbed(player)
@@ -778,10 +844,6 @@ async def on_message(message):
 
     if message.content.startswith('!urt5'):
         await command_urt5(message)
-        return
-
-    if message.channel == discord.utils.get(message.guild.channels, name="register") and message.content.startswith('!register'):
-        await command_register(message)
         return
 
     if message.content.startswith('!createcup'):
