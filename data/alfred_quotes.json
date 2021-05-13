@@ -1,0 +1,95 @@
+{ 
+	"cmdZmb": "Va dormir Zmb",
+
+	"cmdLytchi": "Toi aussi va dormir.",
+
+	"cmdSt0mp": "Mais oui toi aussi tu as une commande.",
+
+	"cmdHoly": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+
+	"cmdUrt5": "soon (tm)",
+
+	"cmdRegister_intro" : "Follow the instructions to register and unlock all the other channels of the **Flawless** server.",
+	"cmdRegister_prompt_auth" : "Enter your urt auth:",
+	"cmdRegister_error_authalreadyreg" : "Auth already registered.",
+	"cmdRegister_error_invalidauth" : "Invalid auth.",
+	"cmdRegister_error_authdoesntexist" : "This auth does not exist.",
+	"cmdRegister_prompt_name" : "Enter your in-game name (case sensitive):",
+	"cmdRegister_error_nametaken" : "In-game name already taken.",
+	"cmdRegister_prompt_country" : "Country you currently live in (use flag emoji):",
+	"cmdRegister_error_country" : "Invalid country",
+	"cmdRegister_success" : "You are successfully registered.",
+	"cmdRegister_log" : "New user registered.",
+
+	"cmdCreateClan_intro" : "Follow the instructions to create your clan, type ``!cancel`` anytime to cancel the clan creation.",
+	"cmdCreateClan_prompt_name" : "Enter clan name:",
+	"cmdCreateClan_cancel" : "Clan creation canceled.",
+	"cmdCreateClan_error_name" : "Clan name already taken.",
+	"cmdCreateClan_prompt_tag" : "Enter clan tag:",
+	"cmdCreateClan_error_tag" : "Clan tag already taken.",
+	"cmdCreateClan_prompt_flag" : "Enter clan country (use flag emoji):",
+	"cmdCreateClan_error_country" : "Invalid country.",
+	"cmdCreateClan_success" : "Clan successfully created.",
+	"cmdCreateClan_log" : "New clan created.",
+
+	"cmdEditClan_prompt_tag" : "Enter the tag of the clan you want to edit:",
+	"cmdEditClan_cancel" : "Clan edit canceled.",
+	"cmdEditClan_error_tagnotexist" : "This clan tag does not exist.",
+	"cmdEditClan_error_notcaptain" : "You are not the captain of that clan.",
+	"cmdEditClan_intro" : "Here are the options to edit your clan, enter the corresponding number to proceed, type ``!cancel`` anytime to cancel: \n**1.** Add a player to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ",
+	"cmdEditClan_prompt_choice" : "Choice number:",
+	"cmdEditClan_error_choice" : "Invalid number.",
+
+	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",
+	"cmdAddPlayer_prompt_auth" : "Enter the urt auth of the player you want to add:",
+	"cmdAddPlayer_cancel" : "Player invitation canceled.",
+	"cmdAddPlayer_error_auth" : "The auth ``{auth}`` is not registered yet, invite the player to join the discord server and use the ``!register`` command.",
+	"cmdAddPlayer_error_alreadyinvited" : "The player ``{name}`` was already invited to that clan.",
+	"cmdAddPlayer_invite" : "``{captain}`` invites you to join his clan ``{teamname}``. React to this message to accept or decline.",
+	"cmdAddPlayer_invite_log" : "``{name}`` was invited to join the clan ``{teamname}``",
+	"cmdAddPlayer_invitesent" : "Invitation sent to ``{name}``.",
+	"cmdAddPlayer_accepted_cap" : "``{name}`` accepted your invite to join your clan ``{teamname}``.",
+	"cmdAddPlayer_accepted" : "You are now in the clan ``{teamname}``.",
+	"cmdAddPlayer_accepted_log" : "``{name}`` **accepted** the invitation to join the clan ``{teamname}``",
+	"cmdAddPlayer_declined_cap" : "``{name}`` declined your invite to join your clan ``{teamname}``.",
+	"cmdAddPlayer_declined" : "You declined the invitation to join clan ``{teamname}``.",
+	"cmdAddPlayer_declined_log" : "``{name}`` **declined** the invitation to join the clan ``{teamname}``",
+
+	"cmdDeletePlayer_prompt_auth" : "Enter the urt auth of the player you want to remove:",
+	"cmdDeletePlayer_cancel" : "Player deletion canceled.",
+	"cmdDeletePlayer_error_auth" : "The auth ``{auth}`` is not registered yet.",
+	"cmdDeletePlayer_error_self" : "You cannot remove yourself from the clan.",
+	"cmdDeletePlayer_error_notinclan" : "The player ``{name}`` is not a member of this clan.",
+	"cmdDeletePlayer_success" : "The player ``{name}`` has been removed from this clan.",
+	"cmdDeletePlayer_success_dm" : "You have been removed from the clan ``{teamname}``.",
+	"cmdDeletePlayer_log" : "``{name}`` has been removed from the clan ``{teamname}``.",
+
+	"cmdUpdateFlag_prompt_flag" : "Enter the new clan flag (use flag emoji only):",
+	"cmdUpdateFlag_cancel" : "Clan edition canceled.",
+	"cmdUpdateFlag_success" : "Clan flag updated.",
+	"cmdUpdateFlag_log" : "The clan ``{teamname}`` updated its country flag from {oldflag} to {newflag}",
+
+	"cmdChangeCaptain_prompt_auth" : "Enter the urt auth of the new clan captain:",
+	"cmdChangeCaptain_cancel" : "Clan captain change canceled.",
+	"cmdChangeCaptain_error_alreadycap" : "You are already the captain of this clan.",
+	"cmdChangeCaptain_error_notinclan" : "The player ``{name}`` is not a member of this clan.",
+	"cmdChangeCaptain_success" : "The player ``{name}`` is now the captain of this clan.",
+	"cmdChangeCaptain_success_dm" : "You are now the captain of the clan ``{teamname}``.",
+	"cmdChangeCaptain_log" : "The clan ``{teamname}`` changed captains. Before: ``{oldcaptain}`` After: ``{newcaptain}``",
+
+	"cmdDeleteClan_intro" : "Are you sure you want to delete the clan ``{teamname}``?",
+	"cmdDeleteClan_prompt_choice" : "Enter ``yes`` or ``no``:",
+	"cmdDeleteClan_prompt_cancel" : "Clan deletion canceled.",
+	"cmdDeleteClan_prompt_success" : "The clan ``{teamname}`` has been deleted.",
+	"cmdDeleteClan_log" : "The clan ``{teamname}`` was **deleted**",
+
+	"cmdCreateCup_error_args" : "Please use the command as following: ``!createcup <name> <number of teams>``",
+
+	"cmdInfo_error_args" : "Please use the command as following: ``!info <player/team_tag>``",
+	"cmdInfo_error_doesntexist" : "This team/player does not exist or is not registered."
+
+
+
+
+			
+}
