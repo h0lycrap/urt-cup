@@ -83,13 +83,19 @@
 	"cmdDeleteClan_prompt_success" : "The clan ``{teamname}`` has been deleted.",
 	"cmdDeleteClan_log" : "The clan ``{teamname}`` was **deleted**",
 
-	"cmdCreateCup_error_args" : "Please use the command as following: ``!createcup <name> <number of teams>``",
+	"cmdCreateCup_prompt_name" : "Enter the name of the cup:",
+	"cmdCreateCup_error_perm" : "You need to be an administrator to create a cup",
+	"cmdCreateCup_prompt_nbofteams" : "Enter the number of teams allowed to signup:",
+	"cmdCreateCup_error_nbofteams" : "Please enter a number.",
+	"cmdCreateCup_error_date" : "Invalid date format.",
+	"cmdCreateCup_error_startdate" : "You can't specify an end date prior to the start date.",
+	"cmdCreateCup_prompt_signupstart" : "Enter signup start date (``DD/MM/YYYY``):",
+	"cmdCreateCup_prompt_signupend" : "Enter signup end date (``DD/MM/YYYY``):",
+	"cmdCreateCup_prompt_cancel" : "Cup creation canceled.",
+	"cmdCreateCup_success" : "Cup successfully created.",
 
 	"cmdInfo_error_args" : "Please use the command as following: ``!info <player/team_tag>``",
 	"cmdInfo_error_doesntexist" : "This team/player does not exist or is not registered."
-
-
-
 
 			
 }

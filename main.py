@@ -9,6 +9,7 @@ import random
 import string
 import requests
 import json
+import datetime
 
 
 conn = mariadb.connect(
@@ -367,7 +368,7 @@ async def add_player(team_toedit, user):
         await captain.send(embed = embed)
 
         await player_topm.send(alfred_quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit[2]))
-        await UpdateRoster()
+        await update_roster()
 
         # Add team role to player
         team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit[3]))
@@ -429,7 +430,7 @@ async def delete_player(team_toedit, user):
     # Remove player from roster
     cursor.execute("DELETE FROM Roster WHERE team_tag = %s AND player_name=%s;", (team_toedit[1], player_toremove[0]))
     conn.commit()
-    await UpdateRoster()
+    await update_roster()
     await user.send(alfred_quotes['cmdDeletePlayer_success'].format(name=player_toremove[0]))
 
     # Show updated roster
@@ -476,7 +477,7 @@ async def update_team_flag(team_toedit, user):
 
     cursor.execute("UPDATE Teams SET country=%s WHERE tag=%s", (serialized_country, team_toedit[1]))
     conn.commit()
-    await UpdateRoster();
+    await update_roster();
 
     await user.send(alfred_quotes['cmdUpdateFlag_success'])
 
@@ -538,7 +539,7 @@ async def change_clan_captain(team_toedit, user):
     cursor.execute("UPDATE Roster SET accepted=1 WHERE team_tag = %s AND player_name=%s;", (team_toedit[1], prev_captain.display_name))
     conn.commit()
 
-    await UpdateRoster()
+    await update_roster()
     await user.send(alfred_quotes['cmdChangeCaptain_success'].format(name=new_captain[0]))
 
     # Show updated roster
@@ -619,6 +620,214 @@ async def delete_team(team_toedit, user):
 
             return
 
+
+# TODO Move this somwhere else
+# Returns true if the input is a date DD/MM/YYYY and also returns the date object
+def check_date_format(date_input): 
+    date_elems = [e for e in date_input.split('/') if e.isnumeric()]
+    if len(date_elems) != 3:
+        return False, None
+
+    day = int(date_elems[0])
+    month = int(date_elems[1])
+    year = int(date_elems[2])
+
+    # Datetime checks the date validity (example: cant use 30/02)
+    try:
+        date = datetime.datetime(year, month, day)
+        return True, date
+
+    except ValueError:
+        return False, None
+
+async def command_info(message):
+    # Check command validity
+    if len(message.content) > len("!info") and message.content[len("!info")] != " ":
+        return
+
+    # Check args
+    args = message.content[len("!info"):].split()
+    if len(args) != 1:
+        if message.guild == None:
+            await message.author.send(alfred_quotes['cmdInfo_error_args'])
+            return
+        await message.channel.send(alfred_quotes['cmdInfo_error_args'])
+        return
+
+    # Check if this is a mention and extract user id
+    if args[0].startswith("<@!") and args[0].endswith(">"):
+        args[0] = args[0][3:-1] 
+
+    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams WHERE tag=%s;", (args[0],))
+    team = cursor.fetchone()
+
+    cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args[0], args[0], args[0]))
+    player = cursor.fetchone()
+
+    if not team and not player:
+        if message.guild == None:
+            await message.author.send(alfred_quotes['cmdInfo_error_doesntexist'])
+            return
+        await message.channel.send(alfred_quotes['cmdInfo_error_doesntexist'])
+        return
+
+    if team:
+        embed, _ = generate_team_embed(tag=team[0])
+
+    elif player:
+        embed = generate_player_embed(player[1])
+
+    # Send to author if this was in dm 
+    if message.guild == None:
+        await message.author.send(embed=embed)
+        return
+
+    await message.channel.send(embed=embed)
+
+
+async def command_createcup(message):
+    def check(m):
+        return m.author == message.author and m.channel == message.channel
+
+    # Check permissions
+    if not message.author.guild_permissions.manage_guild:
+        await message.channel.send(alfred_quotes['cmdCreateCup_error_perm'])
+        return
+
+    # Wait for cup name
+    await message.channel.send(alfred_quotes['cmdCreateCup_prompt_name'])
+    name_msg = await client.wait_for('message', check=check)
+    name = name_msg.content.lower().strip()
+
+    # Cancel 
+    if name == '!cancel':
+        await message.channel.send(alfred_quotes['cmdCreateCup_prompt_cancel'])
+        return
+
+    # Wait for number of teams and check validity
+    number_of_teams_checked = False
+    while not number_of_teams_checked:
+        await message.channel.send(alfred_quotes['cmdCreateCup_prompt_nbofteams'])
+        number_of_teams_msg = await client.wait_for('message', check=check)
+        number_of_teams = number_of_teams_msg.content.lower().strip()
+
+        if not number_of_teams.isnumeric():
+            await message.channel.send(alfred_quotes['cmdCreateCup_error_nbofteams'])
+        else:
+            number_of_teams = int(number_of_teams)
+            number_of_teams_checked = True
+
+
+    # Wait for signup start date and check validity
+    signup_start_date_checked = False
+    while not signup_start_date_checked:
+        await message.channel.send(alfred_quotes['cmdCreateCup_prompt_signupstart'])
+        signupstart_msg = await client.wait_for('message', check=check)
+        signupstart = signupstart_msg.content.lower().strip()
+
+        # Cancel 
+        if signupstart == '!cancel':
+            await message.channel.send(alfred_quotes['cmdCreateCup_prompt_cancel'])
+            return
+
+        signup_start_date_checked, signup_start_date = check_date_format(signupstart)
+
+        if not signup_start_date_checked:
+            await message.channel.send(alfred_quotes['cmdCreateCup_error_date'])
+
+    # Wait for signup end date and check validity
+    signup_end_date_checked = False
+    while not signup_end_date_checked:
+        await message.channel.send(alfred_quotes['cmdCreateCup_prompt_signupend'])
+        signupend_msg = await client.wait_for('message', check=check)
+        signupend = signupend_msg.content.lower().strip()
+
+        # Cancel 
+        if signupend == '!cancel':
+            await message.channel.send(alfred_quotes['cmdCreateCup_prompt_cancel'])
+            return
+
+        signup_end_date_checked, signup_end_date = check_date_format(signupend)
+
+        if not signup_end_date_checked:
+            await message.channel.send(alfred_quotes['cmdCreateCup_error_date'])
+            continue
+
+        # Check if the end date is after the start date
+        if signup_start_date > signup_end_date:
+            await message.channel.send(alfred_quotes['cmdCreateCup_error_startdate'])
+            signup_end_date_checked = False
+            continue
+
+    cursor.execute("INSERT INTO Cups (name, number_of_teams, signup_start_date, signup_end_date) VALUES (%s, %d, %s, %s)", (name, number_of_teams, signup_start_date, signup_end_date))
+    cup_id = cursor.lastrowid
+    conn.commit()
+
+    # Print log
+    await message.channel.send(alfred_quotes['cmdCreateCup_success'])
+
+    # Update signup message
+    await update_signups()
+
+####################UPDATES#################################
+
+async def update_roster():
+    # Get channel
+    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) # Assuming the bot is on 1 server only
+
+    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams;")
+    for team in cursor.fetchall():  
+
+        # Generate the embed
+        embed, insuficient_roster = generate_team_embed(tag=team[0])
+
+        if insuficient_roster:
+            # Remove message from roster if there was one
+            try:
+                roster_message = await roster_channel.fetch_message(team[3])
+                await roster_message.delete()
+            except:
+                pass
+            continue
+
+        # Check if there is a message id stored
+        try:
+            roster_message = await roster_channel.fetch_message(team[3])
+            await roster_message.edit(embed=embed)
+        except:
+
+            # Send new message and store message id
+            new_roster_msg = await roster_channel.send(embed=embed)
+            cursor.execute("UPDATE Teams SET roster_message_id=%s WHERE tag=%s", (str(new_roster_msg.id), team[0]))
+            conn.commit()
+
+async def update_signups():
+    # Get channel (TODO:REFACTOR to account for new channels for different cups)
+    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
+
+    # Get all cups
+    cursor.execute("SELECT id, signup_message_id FROM Cups;")
+    for cup_info in cursor.fetchall():
+
+        # Generate the embed
+        embed = generate_signup_embed(cup_info[0])
+
+        # Check if there is a message id stored
+        try:
+            signup_message = await signup_channel.fetch_message(cup_info[1])
+            await signup_message.edit(embed=embed)
+
+        except:
+            # Send new message and store message id
+            new_signup_msg = await signup_channel.send(embed=embed)
+            cursor.execute("UPDATE Cups SET signup_message_id=%s WHERE id=%s", (str(new_signup_msg.id), cup_info[0]))
+            conn.commit()
+
+
+
+
+
+##################EMBEDS####################################
 
 def generate_team_embed(tag, show_invited=False):
     mini_number_players = 5
@@ -730,100 +939,55 @@ def generate_player_embed(auth):
 
     return embed
 
-async def UpdateRoster():
-    # Get channel
-    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) # Assuming the bot is on 1 server only
+def generate_signup_embed(cup_id):
+    # Get cup info
+    cursor.execute("SELECT name, number_of_teams, signup_start_date, signup_end_date FROM Cups WHERE id=%d", (cup_id,))
+    cup_info = cursor.fetchone()
+    cup_name = cup_info[0]
+    max_number_of_teams = cup_info[1]
+    signup_start_date = datetime.datetime.strptime(cup_info[2], '%Y-%m-%d %H:%M:%S')
+    signup_end_date = datetime.datetime.strptime(cup_info[3], '%Y-%m-%d %H:%M:%S')
 
-    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams;")
-    for team in cursor.fetchall():  
+    # Fetch signed up teams
+    cursor.execute("SELECT team_tag FROM Signups WHERE cup_id=%d", (cup_id,))
+    team_tags = cursor.fetchall()
 
-        # Generate the embed
-        embed, insuficient_roster = generate_team_embed(tag=team[0])
+    team_string = ""
+    tag_string = ""
 
-        if insuficient_roster:
-            # Remove message from roster if there was one
-            try:
-                roster_message = await roster_channel.fetch_message(team[3])
-                await roster_message.delete()
-            except:
-                pass
-            continue
+    #Create embed field content
+    if team_tags:
+        for team_tag in team_tags:
+            # Get team info
+            cursor.execute("SELECT name, country FROM Teams WHERE tag=%s", (team_tag[0],))
+            team_info = cursor.fetchone()
+            team_name = team_info[0]
+            team_flag = flag.flagize(team_info[1])
+            # Temporary 
+            team_tag_str = team_tag[0].replace('`', '\\`')
 
-        # Check if there is a message id stored
-        try:
-            roster_message = await roster_channel.fetch_message(team[3])
-            await roster_message.edit(embed=embed)
-        except:
+            team_string += f"{team_flag} {team_name}\n"
+            tag_string += f"{team_tag_str}\n"
 
-            # Send new message and store message id
-            new_roster_msg = await roster_channel.send(embed=embed)
-            cursor.execute("UPDATE Teams SET roster_message_id=%s WHERE tag=%s", (str(new_roster_msg.id), team[0]))
-            conn.commit()
+        spots_available = max_number_of_teams - len(team_tags)
+    else:
+        spots_available = max_number_of_teams 
 
-async def command_createcup(message):
-    # Check args
-    args = message.content[len("!createcup"):].split()
-    if len(args) != 2 or not args[1].isnumeric():
-        await message.channel.send(alfred_quotes['cmdCreateCup_error_args'])
-        return
+    # Fill empty spots
+    for i in range(spots_available):
+        team_string += ":flag_white: ``\u200b \u200b \u200b \u200b``\n"
+        tag_string += "``\u200b \u200b \u200b \u200b`` \n"
 
-    # TODO Use embed instead
-    signup_msg_content_title = "                     :small_orange_diamond: **Signup List** :small_orange_diamond:\n\n"
-    signup_msg_content = "~\n" + signup_msg_content_title
-    signup_msg_content += "  __N__                        __Teams__                        __Tag__\n\n"
-    for i in range(1, int(args[1])+1):
-        index_string = str(i) + "."
-        signup_msg_content += f"``{index_string.ljust(3)}``  :black_small_square: :flag_white: ``            `` :black_small_square: ``       ``\n\n"
+    # Signup dates
+    signup_string = f"__{signup_start_date.strftime('%a')} {signup_start_date.strftime('%b')} {signup_start_date.day}__ to __{signup_end_date.strftime('%a')} {signup_end_date.strftime('%b')} {signup_end_date.day}__"
 
-    # TODO: Refactor the signup channel identification 
-    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
-    signup_msg = await signup_channel.send(signup_msg_content)
+    # Create the embed
+    embed = discord.Embed(title=f":trophy: {cup_name}", color=0xFFD700, description="Open cup")
+    embed.add_field(name="Team", value= team_string, inline=True)
+    embed.add_field(name="Tag", value= tag_string, inline=True)
+    embed.add_field(name="Signup dates", value= signup_string, inline=False)
 
-async def command_info(message):
-    # Check command validity
-    if len(message.content) > len("!info") and message.content[len("!info")] != " ":
-        return
-
-    # Check args
-    args = message.content[len("!info"):].split()
-    if len(args) != 1:
-        if message.guild == None:
-            await message.author.send(alfred_quotes['cmdInfo_error_args'])
-            return
-        await message.channel.send(alfred_quotes['cmdInfo_error_args'])
-        return
-
-    # Check if this is a mention and extract user id
-    if args[0].startswith("<@!") and args[0].endswith(">"):
-        args[0] = args[0][3:-1] 
-
-    cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams WHERE tag=%s;", (args[0],))
-    team = cursor.fetchone()
-
-    cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args[0], args[0], args[0]))
-    player = cursor.fetchone()
-
-    if not team and not player:
-        if message.guild == None:
-            await message.author.send(alfred_quotes['cmdInfo_error_doesntexist'])
-            return
-        await message.channel.send(alfred_quotes['cmdInfo_error_doesntexist'])
-        return
-
-    if team:
-        embed, _ = generate_team_embed(tag=team[0])
-
-    elif player:
-        embed = generate_player_embed(player[1])
-
-    # Send to author if this was in dm 
-    if message.guild == None:
-        await message.author.send(embed=embed)
-        return
-
-    await message.channel.send(embed=embed)
-
-
+    return embed
 
 
 
@@ -886,7 +1050,8 @@ async def on_raw_reaction_add(payload):
 async def on_ready():
     print("Bot online")
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
-    await UpdateRoster()
+    await update_roster()
+    await update_signups()
 
 client.run(os.getenv('TOKEN'))
 
