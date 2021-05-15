@@ -132,11 +132,6 @@ async def register(user):
 
 async def command_createclan(message):
 
-    # Check command validity
-    if len(message.content) > 11:
-        if message.content[11] != " ":
-            return
-
     def check(m):
             return m.author == message.author and m.guild == None
 
@@ -216,10 +211,6 @@ async def command_createclan(message):
     await log_channel.send(content=alfred_quotes['cmdCreateClan_log'], embed=embed)
 
 async def command_editclan(message): 
-    # Check command validity
-    if len(message.content) > 10:
-        if message.content[10] != " ":
-            return
 
     def check(m):
             return m.author == message.author and m.guild == None
@@ -769,6 +760,107 @@ async def command_createcup(message):
     # Update signup message
     await update_signups()
 
+async def command_signup(message):
+
+    def check(m):
+            return m.author == message.author and m.guild == None
+
+    cursor.execute("SELECT id, name, number_of_teams, signup_start_date, signup_end_date FROM Cups;")
+    cup_infos = cursor.fetchall()
+
+    # List all cups open for signup
+    # TODO: Maybe refactor this to use cup status
+    cups_open =[]
+    for cup_info in cup_infos:
+        cup_id = cup_info[0]
+        max_number_of_teams = cup_info[2]
+        signup_start_date = datetime.datetime.strptime(cup_info[3], '%Y-%m-%d %H:%M:%S')
+        signup_end_date = datetime.datetime.strptime(cup_info[4], '%Y-%m-%d %H:%M:%S')
+
+        # Check if the signup are open
+        if not(signup_start_date <= message.created_at <= signup_end_date):
+            continue
+
+        # Check if cup is full
+        cursor.execute("SELECT team_tag FROM Signups WHERE cup_id=%d", (cup_id,))
+        teams_signedup = cursor.fetchall()
+        if len(teams_signedup) >= max_number_of_teams:
+            continue
+
+        cups_open.append(cup_info)
+
+
+    # Print all cups available
+    if len(cups_open) == 0:
+        await message.author.send(alfred_quotes['cmdSignup_nocup'])
+        return
+
+    await message.author.send(alfred_quotes['cmdSignup_intro'])
+    for (i, cup_open_info) in enumerate(cups_open):
+        embed = generate_signup_embed(cup_open_info[0])
+        await message.author.send(content=str(i+1), embed=embed)
+
+    # Wait for choice and check validity
+    choice_checked = False
+    while not choice_checked:
+        await message.author.send(alfred_quotes['cmdSignup_prompt_choice'])
+        choice_msg = await client.wait_for('message', check=check)
+        choice = choice_msg.content.strip()
+
+        # Cancel 
+        if choice.lower() == '!cancel':
+            await message.author.send(alfred_quotes['cmdSignup_cancel'])
+            return
+
+        # Check if choice is a number and in the possible range
+        if choice.isnumeric() and 1 <= int(choice) <= len(cups_open):
+            choice_checked = True
+        else:
+            await message.author.send(alfred_quotes['cmdSignup_error_choice'])
+    cup_choice = cups_open[int(choice)-1] 
+
+
+     # Wait for clan tag and check if it exists
+    tag_checked = False
+    while not tag_checked:
+        await message.author.send(alfred_quotes['cmdSignup_prompt_tag'].format(cupname=cup_choice[1]))
+        tag_msg = await client.wait_for('message', check=check)
+        tag = tag_msg.content.strip()
+        tag_str = prevent_discord_formating(tag)
+
+        # Cancel 
+        if tag.lower() == '!cancel':
+            await message.author.send(alfred_quotes['cmdSignup_cancel'])
+            return
+
+        # Check if the team exist
+        cursor.execute("SELECT captain, tag, name, role_id, country FROM Teams WHERE tag = %s;", (tag,)) 
+        team_toedit = cursor.fetchone()
+        if not team_toedit:
+            await message.author.send(alfred_quotes['cmdSignup_error_tagnotexist'])
+            continue
+            
+        # Check if the user is the captain of the clan
+        if team_toedit[0] != str(message.author.id):
+            await message.author.send(alfred_quotes['cmdSignup_error_notcaptain'])
+            continue
+
+        tag_checked = True
+
+    # Signup the clan and notify
+    cursor.execute("INSERT INTO Signups (cup_id, team_tag) VALUES (%d, %s);", (cup_id, tag))
+    conn.commit()
+    await message.author.send(alfred_quotes['cmdSignup_success'].format(teamtag=tag_str, cupname=cup_choice[1]))
+
+    # Update signups and log
+    await update_signups()
+    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    await log_channel.send(alfred_quotes['cmdSignup_log'].format(teamtag=tag_str, cupname=cup_choice[1]))
+
+# TODO: move this somewhere else
+def prevent_discord_formating(input_text):
+    return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_')
+
 ####################UPDATES#################################
 
 async def update_roster():
@@ -963,8 +1055,7 @@ def generate_signup_embed(cup_id):
             team_info = cursor.fetchone()
             team_name = team_info[0]
             team_flag = flag.flagize(team_info[1])
-            # Temporary 
-            team_tag_str = team_tag[0].replace('`', '\\`')
+            team_tag_str = prevent_discord_formating(team_tag[0])
 
             team_string += f"{team_flag} {team_name}\n"
             tag_string += f"{team_tag_str}\n"
@@ -994,7 +1085,7 @@ def generate_signup_embed(cup_id):
 #################EVENTS###################################
 
 # Commands executable in dm only
-dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan}
+dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan, '!signup' : command_signup}
 
 # Commands executable both in dm and channels
 dm_channel_funcs = {'!info' : command_info}

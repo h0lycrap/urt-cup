@@ -95,7 +95,16 @@
 	"cmdCreateCup_success" : "Cup successfully created.",
 
 	"cmdInfo_error_args" : "Please use the command as following: ``!info <player/team_tag>``",
-	"cmdInfo_error_doesntexist" : "This team/player does not exist or is not registered."
+	"cmdInfo_error_doesntexist" : "This team/player does not exist or is not registered.",
 
-			
+	"cmdSignup_nocup" : "There are currently no cup open for signup or with an empty slot.",
+	"cmdSignup_intro" : "Here is the list of cups currently open for signup:",
+	"cmdSignup_prompt_choice" : "Enter the cup index you want to signup to:",
+	"cmdSignup_error_choice" : "Invalid choice, type the cup index (example: ``1`` if there is only 1 cup):",
+	"cmdSignup_cancel" : "Cup signup canceled",
+	"cmdSignup_prompt_tag" : "Enter the tag of the team you want to signup to the cup ``{cupname}``:",
+	"cmdSignup_error_tagnotexist" : "This clan tag does not exist.",
+	"cmdSignup_error_notcaptain" : "You are not the captain of that clan.",
+	"cmdSignup_success" : "You successfully signed up your clan {teamtag} to the cup ``{cupname}``.",
+	"cmdSignup_log" : "The clan {teamtag} signed up to the cup ``{cupname}``."
 }
