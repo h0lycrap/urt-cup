@@ -10,6 +10,7 @@ import string
 import requests
 import json
 import datetime
+import re
 
 
 conn = mariadb.connect(
@@ -61,7 +62,7 @@ async def register(user):
     def check(m):
             return m.author.id == user.id and m.guild == None
 
-    await user.send(alfred_quotes['cmdRegister_Intro'])
+    await user.send(alfred_quotes['cmdRegister_intro'])
 
     # Wait for team name and check if the team name is taken
     auth_checked = False
@@ -73,7 +74,7 @@ async def register(user):
         # Check if auth is already registered
         cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth,))   
         if cursor.fetchone():
-            await user.send()
+            await user.send(alfred_quotes['cmdRegister_error_authalreadyreg'])
             continue
         
         if not auth.isalnum():
@@ -210,6 +211,9 @@ async def command_createclan(message):
     embed, _ = generate_team_embed(tag)
     await log_channel.send(content=alfred_quotes['cmdCreateClan_log'], embed=embed)
 
+    # Update roster
+    await update_roster()
+
 async def command_editclan(message): 
 
     def check(m):
@@ -241,36 +245,59 @@ async def command_editclan(message):
 
         tag_checked = True
 
-    # Show team card and display choices
-    embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-    await message.author.send(embed = embed)
-    await message.author.send(alfred_quotes['cmdEditClan_intro'])
-    option_checked = False
 
-    # Wait for the choice 
-    while not option_checked:
-        await message.author.send(alfred_quotes['cmdEditClan_prompt_choice'])
-        choice_msg = await client.wait_for('message', check=check)
+    team_edition_finished = False
+    while not team_edition_finished:
+        # Show team card and display choices
+        embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
+        await message.author.send(embed = embed)
+        await message.author.send(alfred_quotes['cmdEditClan_intro'])
+        option_checked = False
 
-        # Cancel 
-        if choice_msg.content.lower().strip() == '!cancel':
-            await message.author.send(alfred_quotes['cmdEditClan_cancel'])
+        # Wait for the choice 
+        while not option_checked:
+            await message.author.send(alfred_quotes['cmdEditClan_prompt_choice'])
+            choice_msg = await client.wait_for('message', check=check)
+
+            # Cancel 
+            if choice_msg.content.lower().strip() == '!cancel':
+                await message.author.send(alfred_quotes['cmdEditClan_cancel'])
+                return
+
+            # Check if the choice is valid
+            choice = choice_msg.content.strip()
+            if not choice.isnumeric() or not 1 <= int(choice) <= 5:
+                await message.author.send(alfred_quotes['cmdEditClan_error_choice'])
+            else:
+                option_checked = True
+
+
+        # Commands available for team edits
+        editclan_funcs = {'1': add_player, '2': delete_player, '3': update_team_flag, '4': change_clan_captain, '5': delete_team}
+
+        if choice in editclan_funcs:
+            await editclan_funcs[choice](team_toedit, message.author)
+        if choice == '5':
             return
+        
+        # Ask if the user wants to keep going
+        continue_message = await message.author.send(alfred_quotes['cmdEditClan_prompt_continue'])
+        await continue_message.add_reaction(u"\U00002705")
+        await continue_message.add_reaction(u"\U0000274C")
 
-        # Check if the choice is valid
-        choice = choice_msg.content.strip()
-        if not choice.isnumeric() or not 1 <= int(choice) <= 5:
-            await message.author.send(alfred_quotes['cmdEditClan_error_choice'])
-        else:
-            option_checked = True
+        def check_reaction(reaction, user):
+            return user.id != client.user.id and reaction.message == continue_message and (str(reaction.emoji) == u"\U00002705" or str(reaction.emoji) == u"\U0000274C")
 
+        reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
-    # Commands available for team edits
-    editclan_funcs = {'1': add_player, '2': delete_player, '3': update_team_flag, '4': change_clan_captain, '5': delete_team}
+        # Wants to continue
+        if str(reaction.emoji) == u"\U00002705":
+            continue
 
-    if choice in editclan_funcs:
-        await editclan_funcs[choice](team_toedit, message.author)
-        return
+        # Is done
+        elif str(reaction.emoji) == u"\U0000274C":
+            await message.author.send(alfred_quotes['cmdEditClan_continue_no'])
+            team_edition_finished = True
 
 
 # Check if the text is a valid flag emoji
@@ -343,9 +370,9 @@ async def add_player(team_toedit, user):
     await user.send(embed = embed)
 
     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
-    def check(reaction, user):
+    def check_reaction(reaction, user):
             return user.id != client.user.id and reaction.message == invite_message and (str(reaction.emoji) == u"\U00002705" or str(reaction.emoji) == u"\U0000274C")
-    reaction, _ = await client.wait_for('reaction_add', check=check)
+    reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
     # Accepted invite
     if str(reaction.emoji) == u"\U00002705":
@@ -688,10 +715,10 @@ async def command_createcup(message):
     # Wait for cup name
     await message.channel.send(alfred_quotes['cmdCreateCup_prompt_name'])
     name_msg = await client.wait_for('message', check=check)
-    name = name_msg.content.lower().strip()
+    name = name_msg.content.strip()
 
     # Cancel 
-    if name == '!cancel':
+    if name.lower() == '!cancel':
         await message.channel.send(alfred_quotes['cmdCreateCup_prompt_cancel'])
         return
 
@@ -865,7 +892,16 @@ def prevent_discord_formating(input_text):
 
 async def update_roster():
     # Get channel
-    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) # Assuming the bot is on 1 server only
+    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) 
+
+    # Delete index message if any
+    roster_channel_messages = await roster_channel.history(limit=5).flatten()
+    index_message = None
+    for message in roster_channel_messages:
+        if not message.embeds:
+            continue
+        if message.embeds[0].title.startswith(":pencil: Clan index"):
+            index_message = message
 
     cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams;")
     for team in cursor.fetchall():  
@@ -887,11 +923,22 @@ async def update_roster():
             roster_message = await roster_channel.fetch_message(team[3])
             await roster_message.edit(embed=embed)
         except:
+            # Delete index message
+            if index_message:
+                await index_message.delete()
+                index_message = None
 
             # Send new message and store message id
             new_roster_msg = await roster_channel.send(embed=embed)
             cursor.execute("UPDATE Teams SET roster_message_id=%s WHERE tag=%s", (str(new_roster_msg.id), team[0]))
             conn.commit()
+
+    # Post or edit team index
+    index_embed = await generate_team_index_embed()
+    if index_message:
+        await index_message.edit(embed=index_embed)
+    else:
+        await roster_channel.send(embed=index_embed)
 
 async def update_signups():
     # Get channel (TODO:REFACTOR to account for new channels for different cups)
@@ -922,7 +969,7 @@ async def update_signups():
 ##################EMBEDS####################################
 
 def generate_team_embed(tag, show_invited=False):
-    mini_number_players = 5
+    mini_number_players = 1
 
     # Get the team info
     cursor.execute("SELECT country, captain, name FROM Teams WHERE tag=%s;", (tag,))
@@ -1049,15 +1096,16 @@ def generate_signup_embed(cup_id):
 
     #Create embed field content
     if team_tags:
-        for team_tag in team_tags:
+        for i, team_tag in enumerate(team_tags):
             # Get team info
             cursor.execute("SELECT name, country FROM Teams WHERE tag=%s", (team_tag[0],))
             team_info = cursor.fetchone()
             team_name = team_info[0]
             team_flag = flag.flagize(team_info[1])
             team_tag_str = prevent_discord_formating(team_tag[0])
+            index_str = str(i + 1) + "."
 
-            team_string += f"{team_flag} {team_name}\n"
+            team_string += f"``{index_str.ljust(3)}`` {team_flag} {team_name}\n"
             tag_string += f"{team_tag_str}\n"
 
         spots_available = max_number_of_teams - len(team_tags)
@@ -1066,8 +1114,9 @@ def generate_signup_embed(cup_id):
 
     # Fill empty spots
     for i in range(spots_available):
-        team_string += ":flag_white: ``\u200b \u200b \u200b \u200b``\n"
-        tag_string += "``\u200b \u200b \u200b \u200b`` \n"
+        index_str = str(i + len(team_tags) + 1) + "."
+        team_string += f"``{index_str.ljust(3)}`` \u200b \u200b\u200b \u200b\u200b \u200b \u200b \u200b \u200b \u200b\n"
+        tag_string += "\u200b \n"
 
     # Signup dates
     signup_string = f"__{signup_start_date.strftime('%a')} {signup_start_date.strftime('%b')} {signup_start_date.day}__ to __{signup_end_date.strftime('%a')} {signup_end_date.strftime('%b')} {signup_end_date.day}__"
@@ -1077,6 +1126,49 @@ def generate_signup_embed(cup_id):
     embed.add_field(name="Team", value= team_string, inline=True)
     embed.add_field(name="Tag", value= tag_string, inline=True)
     embed.add_field(name="Signup dates", value= signup_string, inline=False)
+
+    return embed
+
+async def generate_team_index_embed():
+
+    # Fetch teams with a message id not null
+    cursor.execute("SELECT tag, country, roster_message_id FROM Teams WHERE roster_message_id != 'NULL'")
+    teams = cursor.fetchall()
+
+    # Sort the teams alphabetically on letters only
+    sorted_teams = sorted(teams, key = lambda x: re.sub('[^A-Za-z]+', '', x[0]).lower())
+
+    index_str_left = ""
+    index_str_right = ""
+
+    # Build embed content
+    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id)
+    for i, team_info in enumerate(sorted_teams):
+        team_tag = flag.flagize(team_info[0])
+        team_flag = flag.flagize(team_info[1])
+
+        try:
+            roster_message = await roster_channel.fetch_message(team_info[2])
+        except:
+            continue
+
+        team_string = f"{team_flag} [{team_tag}]({roster_message.jump_url})\n"
+
+        # Add to left or right column
+        if i % 2 == 0:
+            index_str_left += team_string
+        else:
+            index_str_right += team_string
+
+    if len(index_str_right) == 0:
+        index_str_right = "\u200b"
+    if len(index_str_left) == 0:
+        index_str_left = "\u200b"
+
+    # Create the embed
+    embed = discord.Embed(title=f":pencil: Clan index", color=0xFFD700, description="Click on a clan tag to jump to their roster")
+    embed.add_field(name="Teams", value= index_str_left, inline=True)
+    embed.add_field(name="\u200b", value= index_str_right, inline=True)
 
     return embed
 

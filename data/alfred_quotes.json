@@ -39,6 +39,8 @@
 	"cmdEditClan_intro" : "Here are the options to edit your clan, enter the corresponding number to proceed, type ``!cancel`` anytime to cancel: \n**1.** Add a player to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ",
 	"cmdEditClan_prompt_choice" : "Choice number:",
 	"cmdEditClan_error_choice" : "Invalid number.",
+	"cmdEditClan_prompt_continue" : "Do you want to continue editing this clan?",
+	"cmdEditClan_continue_no" : "Clan edition finished",
 
 	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",
 	"cmdAddPlayer_prompt_auth" : "Enter the urt auth of the player you want to add:",
