@@ -11,6 +11,7 @@ import requests
 import json
 import datetime
 import re
+import asyncio
 
 
 conn = mariadb.connect(
@@ -29,13 +30,18 @@ afred_quotes_loc = "data/alfred_quotes.json"
 with open( afred_quotes_loc, 'rb' ) as json_alfred_quotes :
     alfred_quotes = json.load( json_alfred_quotes )
 
+async_loop = asyncio.get_event_loop()
+
+number_emojis = [u"\U00000031\U0000FE0F\U000020E3", u"\U00000032\U0000FE0F\U000020E3", u"\U00000033\U0000FE0F\U000020E3", u"\U00000034\U0000FE0F\U000020E3", u"\U00000035\U0000FE0F\U000020E3", u"\U00000036\U0000FE0F\U000020E3", u"\U00000037\U0000FE0F\U000020E3", u"\U00000038\U0000FE0F\U000020E3", u"\U00000039\U0000FE0F\U000020E3", u"\U0001F51F"]
+
+
 role_unregistered_id = 836897738796826645
 role_captains_id = 839893529517228113
 channel_log_id = 834947952023437403
 channel_roster_id = 834931256918802512
 message_welcome_id = 838861660805791825
 
-max_players_per_team = 12
+max_players_per_team = 8
 
 
 ###############COMMANDS########################################
@@ -81,9 +87,7 @@ async def register(user):
             await user.send(alfred_quotes['cmdRegister_error_invalidauth'])
             continue
 
-        login_search = requests.get(f"https://www.urbanterror.info/members/profile/{auth}/")
-
-        if "No member with the login or id" in  login_search.text:
+        if check_auth(auth):
             await user.send(alfred_quotes['cmdRegister_error_authdoesntexist'])
             continue
 
@@ -129,6 +133,14 @@ async def register(user):
         await user.edit(nick=name)
     except Exception as e:
         pass
+
+def check_auth(auth):
+    login_search = requests.get(f"https://www.urbanterror.info/members/profile/{auth}/")
+    if "No member with the login or id" in  login_search.text:
+        return False
+    else:
+        return True
+
 
 
 async def command_createclan(message):
@@ -219,31 +231,45 @@ async def command_editclan(message):
     def check(m):
             return m.author == message.author and m.guild == None
 
-     # Wait for clan tag and check if it exists
-    tag_checked = False
-    while not tag_checked:
-        await message.author.send(alfred_quotes['cmdEditClan_prompt_tag'])
-        tag_msg = await client.wait_for('message', check=check)
-        tag = tag_msg.content.strip()
 
-        # Cancel 
-        if tag.lower() == '!cancel':
-            await message.author.send(alfred_quotes['cmdEditClan_cancel'])
-            return
+    # List clans owned by the player
+    cursor.execute("SELECT captain, tag, name, role_id, country FROM Teams WHERE captain = %s;", (str(message.author.id),))
+    clans = cursor.fetchall()
 
-        # Check if the team exist
-        cursor.execute("SELECT captain, tag, name, role_id, country FROM Teams WHERE tag = %s;", (tag,)) 
-        team_toedit = cursor.fetchone()
-        if not team_toedit:
-            await message.author.send(alfred_quotes['cmdEditClan_error_tagnotexist'])
-            continue
-            
-        # Check if the user is the captain of the clan
-        if team_toedit[0] != str(message.author.id):
-            await message.author.send(alfred_quotes['cmdEditClan_error_notcaptain'])
-            continue
+    if not clans:
+        await message.author.send(alfred_quotes['cmdEditClan_error_notcaptain'])
+        return
 
-        tag_checked = True
+    clans_string = ""
+    tag_string = ""
+    for i, clan_info in enumerate(clans):
+        index_str = (str(i + 1) + ".").ljust(2)
+        clan_flag = flag.flagize(clan_info[4])
+        clan_name = clan_info[2]
+        clan_tag = clan_info[1]
+        clans_string += f"``{index_str}`` {clan_flag} {clan_name}\n"
+        tag_string += f"{clan_tag}\n"
+
+    # Create clan list embed
+    embed = discord.Embed(title=f"Which clan do you want to edit?", color=0xFFD700)
+    embed.add_field(name="Team", value= clans_string, inline=True)
+    embed.add_field(name="Tag", value= tag_string, inline=True)
+    clan_list_message = await message.author.send(embed=embed)
+
+    applied_reaction_emojis = []
+    for i, clan_info in enumerate(clans):
+        await clan_list_message.add_reaction(number_emojis[i])
+        applied_reaction_emojis.append(number_emojis[i])
+
+    # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
+    def check_reaction(reaction, user):
+            return user.id != client.user.id and reaction.message == clan_list_message and str(reaction.emoji) in applied_reaction_emojis
+    reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
+
+    # Get the choice
+    clan_choice = applied_reaction_emojis.index(str(reaction.emoji))
+    team_toedit = clans[clan_choice]
+
 
 
     team_edition_finished = False
@@ -251,29 +277,23 @@ async def command_editclan(message):
         # Show team card and display choices
         embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
         await message.author.send(embed = embed)
-        await message.author.send(alfred_quotes['cmdEditClan_intro'])
-        option_checked = False
+        choice_message = await message.author.send(alfred_quotes['cmdEditClan_intro'])
 
-        # Wait for the choice 
-        while not option_checked:
-            await message.author.send(alfred_quotes['cmdEditClan_prompt_choice'])
-            choice_msg = await client.wait_for('message', check=check)
+        number_of_choices = 5
+        for i in range(number_of_choices):
+            await choice_message.add_reaction(number_emojis[i])
 
-            # Cancel 
-            if choice_msg.content.lower().strip() == '!cancel':
-                await message.author.send(alfred_quotes['cmdEditClan_cancel'])
-                return
+        # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
+        def check_reaction(reaction, user):
+                return user.id != client.user.id and reaction.message == choice_message and str(reaction.emoji) in number_emojis[:number_of_choices]
+        reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
-            # Check if the choice is valid
-            choice = choice_msg.content.strip()
-            if not choice.isnumeric() or not 1 <= int(choice) <= 5:
-                await message.author.send(alfred_quotes['cmdEditClan_error_choice'])
-            else:
-                option_checked = True
+        # Get the choice
+        choice = number_emojis.index(str(reaction.emoji)) + 1
 
 
         # Commands available for team edits
-        editclan_funcs = {'1': add_player, '2': delete_player, '3': update_team_flag, '4': change_clan_captain, '5': delete_team}
+        editclan_funcs = {1: add_player, 2: delete_player, 3: update_team_flag, 4: change_clan_captain, 5: delete_team}
 
         if choice in editclan_funcs:
             await editclan_funcs[choice](team_toedit, message.author)
@@ -296,7 +316,8 @@ async def command_editclan(message):
 
         # Is done
         elif str(reaction.emoji) == u"\U0000274C":
-            await message.author.send(alfred_quotes['cmdEditClan_continue_no'])
+            embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
+            await message.author.send(content=alfred_quotes['cmdEditClan_continue_no'], embed=embed)
             team_edition_finished = True
 
 
@@ -311,25 +332,32 @@ async def add_player(team_toedit, user):
 
     # Check if the max number of players per clan has been reached
     cursor.execute("SELECT * FROM Roster WHERE team_tag = %s;", (team_toedit[1],))
-    if len(cursor.fetchall()) >= max_players_per_team:
+    players_inclan = cursor.fetchall()
+    if len(players_inclan) >= max_players_per_team:
         await user.send(alfred_quotes['cmdAddPlayer_error_maxplayer'])
         return
 
     def check(m):
             return m.author == user and m.guild == None
 
-    # Wait for the player auth, and check if it exist
-    player_checked = False
-    while not player_checked:
-        await user.send(alfred_quotes['cmdAddPlayer_prompt_auth'])
-        
-        player_msg = await client.wait_for('message', check=check)
-        auth = player_msg.content.strip()
+    # Wait for the auth list to add
+    await user.send(alfred_quotes['cmdAddPlayer_prompt_auth'])
+    
+    player_msg = await client.wait_for('message', check=check)
+    auth_list = player_msg.content.strip().split(',')
 
-        # Cancel 
-        if auth.lower() == '!cancel':
-            await user.send(alfred_quotes['cmdAddPlayer_cancel'])
-            return
+    # Cancel 
+    if player_msg.content.strip().lower() == '!cancel':
+        await user.send(alfred_quotes['cmdAddPlayer_cancel'])
+        return
+
+    # Check if we are trying to add more players than the limit
+    if len(auth_list) + len(players_inclan) > max_players_per_team:
+        await user.send(alfred_quotes['cmdAddPlayer_error_maxplayer'])
+        return
+
+    for auth in auth_list:
+        auth = auth.strip()
 
         # Check if the auth is registered
         cursor.execute("SELECT ingame_name, discord_id FROM Users WHERE urt_auth = %s;", (auth,))
@@ -344,35 +372,37 @@ async def add_player(team_toedit, user):
             await user.send(alfred_quotes['cmdAddPlayer_error_alreadyinvited'].format(name=player_toadd[0]))
             continue
 
-        player_checked = True
+        # Add player to roster
+        cursor.execute("INSERT INTO Roster(team_tag, player_name) VALUES (%s, %s) ;", (team_toedit[1], player_toadd[0]))
+        conn.commit() 
 
-    # Add player to roster
-    cursor.execute("INSERT INTO Roster(team_tag, player_name) VALUES (%s, %s) ;", (team_toedit[1], player_toadd[0]))
-    conn.commit() 
+        # Invite each player
+        await user.send(alfred_quotes['cmdAddPlayer_invitesent'].format(name=player_toadd[0])) 
+        async_loop.create_task(invite_player(player_toadd, user, team_toedit))
 
+async def invite_player(player_toadd, user, team_toedit):
     # DM invite to user
     player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toadd[1]))
     captain = discord.utils.get(client.guilds[0].members, id=int(user.id)) # Assuming the bot is only on 1 server
 
     invite_message = await player_topm.send(alfred_quotes['cmdAddPlayer_invite'].format(captain=captain.display_name, teamname=team_toedit[2]))
     await invite_message.add_reaction(u"\U00002705")
-    await invite_message.add_reaction(u"\U0000274C")
-
-    await user.send(alfred_quotes['cmdAddPlayer_invitesent'].format(name=player_toadd[0]))  
+    await invite_message.add_reaction(u"\U0000274C") 
 
     # Print on the log channel
     log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdAddPlayer_invite_log'].format(name=player_toadd[0], teamname=team_toedit[2]))
 
-
-    # Show updated roster
-    embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-    await user.send(embed = embed)
-
     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
     def check_reaction(reaction, user):
             return user.id != client.user.id and reaction.message == invite_message and (str(reaction.emoji) == u"\U00002705" or str(reaction.emoji) == u"\U0000274C")
     reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
+
+    # Check if the player was still invited
+    cursor.execute("SELECT id FROM Roster WHERE accepted=0 AND team_tag = %s AND player_name=%s;", (team_toedit[1], player_toadd[0]))
+    if not cursor.fetchone():
+        await player_topm.send(alfred_quotes['cmdAddPlayer_nolongerinvited'].format(teamname=team_toedit[2]))
+        return
 
     # Accepted invite
     if str(reaction.emoji) == u"\U00002705":
@@ -380,10 +410,6 @@ async def add_player(team_toedit, user):
         conn.commit()
 
         await captain.send(alfred_quotes['cmdAddPlayer_accepted_cap'].format(name=player_toadd[0], teamname=team_toedit[2]))
-
-        # Show updated roster
-        embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-        await captain.send(embed = embed)
 
         await player_topm.send(alfred_quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit[2]))
         await update_roster()
@@ -448,12 +474,8 @@ async def delete_player(team_toedit, user):
     # Remove player from roster
     cursor.execute("DELETE FROM Roster WHERE team_tag = %s AND player_name=%s;", (team_toedit[1], player_toremove[0]))
     conn.commit()
-    await update_roster()
     await user.send(alfred_quotes['cmdDeletePlayer_success'].format(name=player_toremove[0]))
-
-    # Show updated roster
-    embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-    await user.send(embed = embed)
+    async_loop.create_task(update_roster())
 
 
     # Remove team role from player
@@ -495,13 +517,9 @@ async def update_team_flag(team_toedit, user):
 
     cursor.execute("UPDATE Teams SET country=%s WHERE tag=%s", (serialized_country, team_toedit[1]))
     conn.commit()
-    await update_roster();
+    async_loop.create_task(update_roster());
 
     await user.send(alfred_quotes['cmdUpdateFlag_success'])
-
-    # Show updated roster
-    embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-    await user.send(embed = embed)
 
     # Print on the log channel
     log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
@@ -557,12 +575,8 @@ async def change_clan_captain(team_toedit, user):
     cursor.execute("UPDATE Roster SET accepted=1 WHERE team_tag = %s AND player_name=%s;", (team_toedit[1], prev_captain.display_name))
     conn.commit()
 
-    await update_roster()
+    async_loop.create_task(update_roster())
     await user.send(alfred_quotes['cmdChangeCaptain_success'].format(name=new_captain[0]))
-
-    # Show updated roster
-    embed, _ = generate_team_embed(tag=team_toedit[1], show_invited=True)
-    await user.send(embed = embed)
 
     # Notify new captain
     player_topm = discord.utils.get(client.users, id=int(new_captain[1]))
@@ -635,6 +649,9 @@ async def delete_team(team_toedit, user):
             # Print on the log channel
             log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
             await log_channel.send(alfred_quotes['cmdDeleteClan_log'].format(teamname=team_toedit[2]))
+
+            # Update roster
+            await update_roster()
 
             return
 

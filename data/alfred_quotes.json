@@ -5,7 +5,7 @@
 
 	"cmdSt0mp": "Mais oui toi aussi tu as une commande.",
 
-	"cmdHoly": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+	"cmdHoly": "<https://www.youtube.com/watch?v=dQw4w9WgXcQ>",
 
 	"cmdUrt5": "soon (tm)",
 
@@ -35,17 +35,17 @@
 	"cmdEditClan_prompt_tag" : "Enter the tag of the clan you want to edit:",
 	"cmdEditClan_cancel" : "Clan edit canceled.",
 	"cmdEditClan_error_tagnotexist" : "This clan tag does not exist.",
-	"cmdEditClan_error_notcaptain" : "You are not the captain of that clan.",
-	"cmdEditClan_intro" : "Here are the options to edit your clan, enter the corresponding number to proceed, type ``!cancel`` anytime to cancel: \n**1.** Add a player to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ",
+	"cmdEditClan_error_notcaptain" : "You are not the captain of any clan.",
+	"cmdEditClan_intro" : "**1.** Add players to your clan \n**2.** Remove a player from your clan \n**3.** Change clan flag \n**4** Change clan captain \n**5.** Delete clan ",
 	"cmdEditClan_prompt_choice" : "Choice number:",
 	"cmdEditClan_error_choice" : "Invalid number.",
 	"cmdEditClan_prompt_continue" : "Do you want to continue editing this clan?",
 	"cmdEditClan_continue_no" : "Clan edition finished",
 
 	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",
-	"cmdAddPlayer_prompt_auth" : "Enter the urt auth of the player you want to add:",
+	"cmdAddPlayer_prompt_auth" : "Enter the list of urt auths of the players you want to add (separate each auth with a comma ``,`` if you want to add more than 1 player):",
 	"cmdAddPlayer_cancel" : "Player invitation canceled.",
-	"cmdAddPlayer_error_auth" : "The auth ``{auth}`` is not registered yet, invite the player to join the discord server and use the ``!register`` command.",
+	"cmdAddPlayer_error_auth" : "The auth ``{auth}`` is not registered yet, invite the player to join the discord server and register using this link: <https://discord.gg/DBJjn3erzz>.",
 	"cmdAddPlayer_error_alreadyinvited" : "The player ``{name}`` was already invited to that clan.",
 	"cmdAddPlayer_invite" : "``{captain}`` invites you to join his clan ``{teamname}``. React to this message to accept or decline.",
 	"cmdAddPlayer_invite_log" : "``{name}`` was invited to join the clan ``{teamname}``",
@@ -56,6 +56,7 @@
 	"cmdAddPlayer_declined_cap" : "``{name}`` declined your invite to join your clan ``{teamname}``.",
 	"cmdAddPlayer_declined" : "You declined the invitation to join clan ``{teamname}``.",
 	"cmdAddPlayer_declined_log" : "``{name}`` **declined** the invitation to join the clan ``{teamname}``",
+	"cmdAddPlayer_nolongerinvited" : "You are no longer invited to the clan ``{teamname}``",
 
 	"cmdDeletePlayer_prompt_auth" : "Enter the urt auth of the player you want to remove:",
 	"cmdDeletePlayer_cancel" : "Player deletion canceled.",
