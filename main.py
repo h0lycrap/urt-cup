@@ -25,6 +25,7 @@ cursor = conn.cursor(dictionary=True)
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
+guild = None
 
 afred_quotes_loc = "data/alfred_quotes.json"
 with open( afred_quotes_loc, 'rb' ) as json_alfred_quotes :
@@ -32,14 +33,18 @@ with open( afred_quotes_loc, 'rb' ) as json_alfred_quotes :
 
 async_loop = asyncio.get_event_loop()
 
-number_emojis = [u"\U00000031\U0000FE0F\U000020E3", u"\U00000032\U0000FE0F\U000020E3", u"\U00000033\U0000FE0F\U000020E3", u"\U00000034\U0000FE0F\U000020E3", u"\U00000035\U0000FE0F\U000020E3", u"\U00000036\U0000FE0F\U000020E3", u"\U00000037\U0000FE0F\U000020E3", u"\U00000038\U0000FE0F\U000020E3", u"\U00000039\U0000FE0F\U000020E3", u"\U0001F51F"]
-
+#number_emojis = [u"\U00000031\U0000FE0F\U000020E3", u"\U00000032\U0000FE0F\U000020E3", u"\U00000033\U0000FE0F\U000020E3", u"\U00000034\U0000FE0F\U000020E3", u"\U00000035\U0000FE0F\U000020E3", u"\U00000036\U0000FE0F\U000020E3", u"\U00000037\U0000FE0F\U000020E3", u"\U00000038\U0000FE0F\U000020E3", u"\U00000039\U0000FE0F\U000020E3", u"\U0001F51F"]
+letter_emojis = [u"\U0001F1E6", u"\U0001F1E7", u"\U0001F1E8", u"\U0001F1E9", u"\U0001F1EA", u"\U0001F1EB", u"\U0001F1EC", u"\U0001F1ED", u"\U0001F1EE", u"\U0001F1EF", u"\U0001F1F0", u"\U0001F1F1", u"\U0001F1F2", u"\U0001F1F2", u"\U0001F1F3", u"\U0001F1F4", u"\U0001F1F5", u"\U0001F1F6", u"\U0001F1F7", u"\U0001F1F8", u"\U0001F1F9", u"\U0001F1FA", u"\U0001F1FB", u"\U0001F1FC", u"\U0001F1FD", u"\U0001F1FE", u"\U0001F1FF"]
+number_emojis = []
 
 role_unregistered_id = 836897738796826645
 role_captains_id = 839893529517228113
+role_flawless_crew_id = 839651903298207816
+role_cup_supervisor_id = 836901156642226196
 channel_log_id = 834947952023437403
 channel_roster_id = 834931256918802512
 message_welcome_id = 838861660805791825
+category_match_schedule_id = 835237146225934426
 
 max_players_per_team = 8
 
@@ -49,7 +54,7 @@ users_busy = []
 ###############COMMANDS########################################
 
 async def command_zmb(message):
-    zmb = discord.utils.get(client.guilds[0].members, id=205821831964393472)
+    zmb = discord.utils.get(guild.members, id=205821831964393472)
     embed=discord.Embed(title=alfred_quotes['cmdZmb'], color=0x9b2ab2)
     embed.set_thumbnail(url=zmb.avatar_url)
     await message.channel.send(embed=embed) 
@@ -123,10 +128,10 @@ async def register(user):
     cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
     conn.commit()
     await user.send(alfred_quotes['cmdRegister_success'])
-    await user.remove_roles(discord.utils.get(client.guilds[0].roles, id=role_unregistered_id))
+    await user.remove_roles(discord.utils.get(guild.roles, id=role_unregistered_id))
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     embed = generate_player_embed(auth)
     await log_channel.send(content=alfred_quotes['cmdRegister_log'], embed=embed)
 
@@ -208,15 +213,15 @@ async def command_createclan(message):
             await message.author.send(alfred_quotes['cmdCreateClan_error_country'])
 
     # Create team ds role
-    team_role = await client.guilds[0].create_role(name=tag)
+    team_role = await guild.create_role(name=tag)
 
     # Add team to DB
     cursor.execute("INSERT INTO Teams(name, tag, country, captain, role_id) VALUES (%s, %s, %s, %s, %s) ;", (teamname, tag, country, message.author.id, team_role.id))
     conn.commit()
 
     # Add captain to team roster accepted=2 means captain
-    captain = discord.utils.get(client.guilds[0].members, id=int(message.author.id))
-    captain_role = discord.utils.get(client.guilds[0].roles, id=int(role_captains_id))
+    captain = discord.utils.get(guild.members, id=int(message.author.id))
+    captain_role = discord.utils.get(guild.roles, id=int(role_captains_id))
     await captain.add_roles(captain_role, team_role)
     cursor.execute("INSERT INTO Roster(team_tag, player_name, accepted) VALUES (%s, %s, %d) ;", (tag, captain.display_name, 2))
     conn.commit()
@@ -224,7 +229,7 @@ async def command_createclan(message):
     await message.author.send(alfred_quotes['cmdCreateClan_success'])
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     embed, _ = generate_team_embed(tag)
     await log_channel.send(content=alfred_quotes['cmdCreateClan_log'], embed=embed)
 
@@ -260,16 +265,18 @@ async def command_editclan(message):
         choice_message = await message.author.send(alfred_quotes['cmdEditClan_intro'])
 
         number_of_choices = 5
+        applied_reaction_emojis = []
         for i in range(number_of_choices):
             await choice_message.add_reaction(number_emojis[i])
+            applied_reaction_emojis.append(number_emojis[i].name)
 
         # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
         def check_reaction(reaction, user):
-                return user.id != client.user.id and reaction.message == choice_message and str(reaction.emoji) in number_emojis[:number_of_choices]
+                return user.id != client.user.id and reaction.message == choice_message and reaction.emoji.name in applied_reaction_emojis
         reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
         # Get the choice
-        choice = number_emojis.index(str(reaction.emoji)) + 1
+        choice = applied_reaction_emojis.index(reaction.emoji.name) + 1
 
 
         # Commands available for team edits
@@ -369,15 +376,15 @@ async def add_player(team_toedit, user):
 
 async def invite_player(player_toadd, user, team_toedit):
     # DM invite to user
-    player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toadd['discord_id']))
-    captain = discord.utils.get(client.guilds[0].members, id=int(user.id)) # Assuming the bot is only on 1 server
+    player_topm = discord.utils.get(guild.members, id=int(player_toadd['discord_id']))
+    captain = discord.utils.get(guild.members, id=int(user.id)) # Assuming the bot is only on 1 server
 
     invite_message = await player_topm.send(alfred_quotes['cmdAddPlayer_invite'].format(captain=captain.display_name, teamname=team_toedit['name']))
     await invite_message.add_reaction(u"\U00002705")
     await invite_message.add_reaction(u"\U0000274C") 
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdAddPlayer_invite_log'].format(name=player_toadd['ingame_name'], teamname=team_toedit['name']))
 
     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
@@ -402,7 +409,7 @@ async def invite_player(player_toadd, user, team_toedit):
         await update_roster()
 
         # Add team role to player
-        team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit['role_id']))
+        team_role = discord.utils.get(guild.roles, id=int(team_toedit['role_id']))
         await player_topm.add_roles(team_role)
 
         # Print on the log channel
@@ -466,15 +473,15 @@ async def delete_player(team_toedit, user):
 
 
     # Remove team role from player
-    player_topm = discord.utils.get(client.guilds[0].members, id=int(player_toremove['discord_id']))
-    team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit['role_id']))
+    player_topm = discord.utils.get(guild.members, id=int(player_toremove['discord_id']))
+    team_role = discord.utils.get(guild.roles, id=int(team_toedit['role_id']))
     await player_topm.remove_roles(team_role)
 
     # Notify removed user
     await player_topm.send(alfred_quotes['cmdDeletePlayer_success_dm'].format(teamname=team_toedit['name']))
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdDeletePlayer_log'].format(name=player_toremove['ingame_name'], teamname=team_toedit['name']))
 
 
@@ -509,7 +516,7 @@ async def update_team_flag(team_toedit, user):
     await user.send(alfred_quotes['cmdUpdateFlag_success'])
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdUpdateFlag_log'].format(teamname=team_toedit['name'], oldflag=oldflag, newflag=country))
 
 async def change_clan_captain(team_toedit, user):
@@ -558,7 +565,7 @@ async def change_clan_captain(team_toedit, user):
     conn.commit()
 
     # Remove captain status from prev captain
-    prev_captain = discord.utils.get(client.guilds[0].members, id=int(user.id))
+    prev_captain = discord.utils.get(guild.members, id=int(user.id))
     cursor.execute("UPDATE Roster SET accepted=1 WHERE team_tag = %s AND player_name=%s;", (team_toedit['tag'], prev_captain.display_name))
     conn.commit()
 
@@ -570,7 +577,7 @@ async def change_clan_captain(team_toedit, user):
     await player_topm.send(alfred_quotes['cmdChangeCaptain_success_dm'].format(teamname=team_toedit['name']))
 
     # Print on the log channel
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdChangeCaptain_log'].format(teamname=team_toedit['name'], oldcaptain=prev_captain.display_name, newcaptain=new_captain['ingame_name']))
 
 async def delete_team(team_toedit, user):
@@ -601,7 +608,7 @@ async def delete_team(team_toedit, user):
             roster_message_id = cursor.fetchone()
 
             # Get channel and remove message
-            roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id)
+            roster_channel = discord.utils.get(guild.channels, id=channel_roster_id)
             try:
                 roster_message = await roster_channel.fetch_message(roster_message_id['roster_message_id'])
                 await roster_message.delete()
@@ -610,7 +617,7 @@ async def delete_team(team_toedit, user):
 
             # Delete team role
             try:
-                team_role = discord.utils.get(client.guilds[0].roles, id=int(team_toedit['role_id']))
+                team_role = discord.utils.get(guild.roles, id=int(team_toedit['role_id']))
                 await team_role.delete()
             except Exception as e:
                 print(e)
@@ -624,8 +631,8 @@ async def delete_team(team_toedit, user):
             conn.commit()
 
             # Remove captain role if the captain is no longer captain of any team
-            prev_captain = discord.utils.get(client.guilds[0].members, id=int(user.id))
-            captain_role = discord.utils.get(client.guilds[0].roles, id=int(role_captains_id))
+            prev_captain = discord.utils.get(guild.members, id=int(user.id))
+            captain_role = discord.utils.get(guild.roles, id=int(role_captains_id))
             cursor.execute("SELECT id FROM Roster WHERE accepted=2 AND player_name=%s", (prev_captain.display_name,))
             if not cursor.fetchone():
                 await prev_captain.remove_roles(captain_role)
@@ -634,7 +641,7 @@ async def delete_team(team_toedit, user):
             await user.send(alfred_quotes['cmdDeleteClan_prompt_success'].format(teamname=team_toedit['name']))
 
             # Print on the log channel
-            log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+            log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
             await log_channel.send(alfred_quotes['cmdDeleteClan_log'].format(teamname=team_toedit['name']))
 
             # Update roster
@@ -883,7 +890,7 @@ async def command_signup(message):
 
     # Update signups and log
     await update_signups()
-    log_channel =  discord.utils.get(client.guilds[0].channels, id=channel_log_id)
+    log_channel =  discord.utils.get(guild.channels, id=channel_log_id)
     await log_channel.send(alfred_quotes['cmdSignup_log'].format(teamtag=tag_str, cupname=cup_choice['name']))
 
 # TODO: move this somewhere else
@@ -891,7 +898,7 @@ def prevent_discord_formating(input_text):
     return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_')
 
 
-async def command_schedule(message):
+async def command_fixture(message):
     cursor.execute("SELECT * FROM Cups;")
     cups = cursor.fetchall()
 
@@ -901,22 +908,22 @@ async def command_schedule(message):
         cup_name_list_str += f"``{index_str}`` {cup_info['name']}\n"
 
     # Create cup list embed
-    embed = discord.Embed(title=f"For which cup do you want to schedule?", color=0xFFD700)
+    embed = discord.Embed(title=f"For which cup do you want to create the fixture?", color=0xFFD700)
     embed.add_field(name="Cup", value= cup_name_list_str, inline=True)
     cup_list_message = await message.channel.send(embed=embed)
 
     applied_reaction_emojis = []
     for i, cup_info in enumerate(cups):
         await cup_list_message.add_reaction(number_emojis[i])
-        applied_reaction_emojis.append(number_emojis[i])
+        applied_reaction_emojis.append(number_emojis[i].name)
 
     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
     def check_reaction(reaction, user):
-            return user.id == message.author.id and reaction.message == cup_list_message and str(reaction.emoji) in applied_reaction_emojis
+            return user.id == message.author.id and reaction.message == cup_list_message and reaction.emoji.name in applied_reaction_emojis
     reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
     # Get the choice
-    cup_choice = applied_reaction_emojis.index(str(reaction.emoji))
+    cup_choice = applied_reaction_emojis.index(reaction.emoji.name)
     cup_toedit = cups[cup_choice]
 
     # List clans signed up in the cup
@@ -942,7 +949,55 @@ async def command_schedule(message):
     # Second clan
     team2 = await generate_team_list_embed(clan_info_list, "Second clan?", message)
 
+    # Select if BO1 or BO2 or BO3 or BO5 or BO7
+    # TODO: maybe put this in a table in the DB
+    formats = ['BO1', 'BO2', 'BO3', 'BO5']
+    embed = discord.Embed(title=f"Match format?", color=0xFFD700)
+    embed.add_field(name="Format", value= "``1.`` BO1 \n ``2.`` BO2 \n ``3.`` BO3 \n ``4.`` BO5", inline=True)
+    fixture_format_message = await message.channel.send(embed=embed)
 
+    applied_reaction_emojis = []
+    for i in range(4):
+        await fixture_format_message.add_reaction(number_emojis[i])
+        applied_reaction_emojis.append(number_emojis[i].name)
+
+    # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
+    def check_reaction(reaction, user):
+            return user.id == message.author.id and reaction.message == fixture_format_message and reaction.emoji.name in applied_reaction_emojis
+    reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
+
+    # Get the choice
+    format_choice = applied_reaction_emojis.index(reaction.emoji.name)
+    fixture_format = formats[format_choice]
+
+
+    # Get different roles that will have access to the channel
+    role_team1 = discord.utils.get(guild.roles, id=int(team1['role_id'])) 
+    role_team2 = discord.utils.get(guild.roles, id=int(team2['role_id'])) 
+    role_flawless_crew = discord.utils.get(guild.roles, id=int(role_flawless_crew_id)) 
+    role_cup_supervisor = discord.utils.get(guild.roles, id=int(role_cup_supervisor_id)) 
+
+    # Set the permissions
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        guild.me: discord.PermissionOverwrite(read_messages=True),
+        role_team1: discord.PermissionOverwrite(read_messages=True),
+        role_team2: discord.PermissionOverwrite(read_messages=True),
+        role_flawless_crew: discord.PermissionOverwrite(read_messages=True),
+        role_cup_supervisor: discord.PermissionOverwrite(read_messages=True)
+    }
+
+    # Create text channel
+    fixture_category = discord.utils.get(guild.channels, id=category_match_schedule_id) 
+    fixture_channel = await guild.create_text_channel(f"abcd┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category)
+
+    # TODO: add this into DB
+
+    # Send fixture card
+    embed = generate_fixture_embed(team1, team2)
+    fixture_card = await fixture_channel.send(embed=embed)
+
+    """
     # Map 1
     cursor.execute("SELECT * FROM Maps;")
     map_list = sorted(cursor.fetchall(), key = lambda x: re.sub('[^A-Za-z]+', '', x['name']).lower())
@@ -954,12 +1009,13 @@ async def command_schedule(message):
 
     embed = generate_fixture_embed(team1, team2, map1, map2)
     await message.channel.send(embed=embed)
+    """
 
 ####################UPDATES#################################
 
 async def update_roster():
     # Get channel
-    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id) 
+    roster_channel = discord.utils.get(guild.channels, id=channel_roster_id) 
 
     # Delete index message if any
     roster_channel_messages = await roster_channel.history(limit=5).flatten()
@@ -1009,7 +1065,7 @@ async def update_roster():
 
 async def update_signups():
     # Get channel (TODO:REFACTOR to account for new channels for different cups)
-    signup_channel = discord.utils.get(client.guilds[0].channels, id=836895695269134386)
+    signup_channel = discord.utils.get(guild.channels, id=836895695269134386)
 
     # Get all cups
     cursor.execute("SELECT id, signup_message_id FROM Cups;")
@@ -1058,15 +1114,15 @@ async def generate_team_list_embed(clan_info_list, title, message):
     applied_reaction_emojis = []
     for i, clan_info in enumerate(clan_info_list):
         await clan_list_message.add_reaction(number_emojis[i])
-        applied_reaction_emojis.append(number_emojis[i])
+        applied_reaction_emojis.append(number_emojis[i].name)
 
      # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
     def check_reaction(reaction, user):
-            return user.id != client.user.id and reaction.message == clan_list_message and str(reaction.emoji) in applied_reaction_emojis
+            return user.id != client.user.id and reaction.message == clan_list_message and reaction.emoji.name in applied_reaction_emojis
     reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
     # Get the choice
-    clan_choice = clan_info_list[applied_reaction_emojis.index(str(reaction.emoji))]
+    clan_choice = clan_info_list[applied_reaction_emojis.index(reaction.emoji.name)]
 
     return clan_choice
 
@@ -1089,15 +1145,15 @@ async def generate_map_list_embed(map_list, title, message):
     applied_reaction_emojis = []
     for i, map_info in enumerate(map_list):
         await map_list_message.add_reaction(number_emojis[i])
-        applied_reaction_emojis.append(number_emojis[i])
+        applied_reaction_emojis.append(number_emojis[i].name)
 
      # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
     def check_reaction(reaction, user):
-            return user.id != client.user.id and reaction.message == map_list_message and str(reaction.emoji) in applied_reaction_emojis
+            return user.id != client.user.id and reaction.message == map_list_message and reaction.emoji.name in applied_reaction_emojis
     reaction, _ = await client.wait_for('reaction_add', check=check_reaction)
 
     # Get the choice
-    map_choice = map_list[applied_reaction_emojis.index(str(reaction.emoji))]
+    map_choice = map_list[applied_reaction_emojis.index(reaction.emoji.name)]
 
     return map_choice
 
@@ -1109,7 +1165,7 @@ def generate_team_embed(tag, show_invited=False):
     cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (tag,))
     team = cursor.fetchone()
     country = flag.flagize(team['country'])
-    captain = discord.utils.get(client.guilds[0].members, id=int(team['captain']))
+    captain = discord.utils.get(guild.members, id=int(team['captain']))
     name = team['name']
 
      # Get the players for each team
@@ -1176,7 +1232,7 @@ def generate_player_embed(auth):
     cursor.execute("SELECT * FROM Users WHERE urt_auth=%s;", (auth,))
     player = cursor.fetchone()
 
-    ds_player = discord.utils.get(client.guilds[0].members, id=int(player['discord_id']))
+    ds_player = discord.utils.get(guild.members, id=int(player['discord_id']))
     embed=discord.Embed(title=f"{flag.flagize(player['country'])} \u200b {player['ingame_name']}", color=0x9b2ab2)
     embed.add_field(name="Auth", value= player['urt_auth'], inline=False)
     embed.set_thumbnail(url=ds_player.avatar_url)
@@ -1193,20 +1249,20 @@ def generate_player_embed(auth):
         teams_str=""
         for team in teams:
             # Get team country
-            cursor.execute("SELECT country FROM Teams WHERE tag=%s", (team['tag'],))
+            cursor.execute("SELECT country FROM Teams WHERE tag=%s", (team['team_tag'],))
             country = cursor.fetchone()
 
             # If he is a member of the team
             if int(team['accepted']) == 1:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['tag']}\n"
+                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']}\n"
 
             # If he is the captain of the team
             elif int(team['accepted']) == 2:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['tag']} (Captain)\n"
+                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']} (Captain)\n"
 
             # If he is inactive
             elif int(team['accepted']) == 3:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['tag']} (Inactive)\n" 
+                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']} (Inactive)\n" 
 
     embed.add_field(name="Clans", value= teams_str, inline=True)
 
@@ -1276,7 +1332,7 @@ async def generate_team_index_embed():
     index_str_right = ""
 
     # Build embed content
-    roster_channel = discord.utils.get(client.guilds[0].channels, id=channel_roster_id)
+    roster_channel = discord.utils.get(guild.channels, id=channel_roster_id)
     for i, team_info in enumerate(sorted_teams):
         team_tag = team_info['tag']
         team_flag = flag.flagize(team_info['country'])
@@ -1306,13 +1362,13 @@ async def generate_team_index_embed():
 
     return embed
 
-def generate_fixture_embed(team1, team2, map1, map2):
+def generate_fixture_embed(team1, team2):
     embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description= "Group stage game")
     embed.add_field(name=":pencil: Status", value= "-", inline=True)
     embed.add_field(name=":calendar_spiral: Date", value= "-", inline=True)
     embed.add_field(name=":alarm_clock: Time (CET)", value= "-", inline=True)
-    embed.add_field(name=":map: Map TS", value= f"{map1['name']}", inline=True)
-    embed.add_field(name=":map: Map CTF", value= f"{map2['name']}", inline=True)
+    embed.add_field(name=":map: Map TS", value= f"-", inline=True)
+    embed.add_field(name=":map: Map CTF", value= f"-", inline=True)
     embed.add_field(name=":link: Demo and MOSS", value= f"https://dev.urt.li", inline=True)
 
     return embed
@@ -1326,7 +1382,7 @@ dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan, 
 channel_funcs = {'!zmb' : command_zmb, '!lytchi' : command_lytchi ,'!st0mp' : command_st0mp, '!holy' : command_holycrap, '!urt5' : command_urt5, '!info' : command_info}
 
 # Admin commands
-admin_funcs = {'!createcup': command_createcup, '!schedule': command_schedule}
+admin_funcs = {'!createcup': command_createcup, '!fixture': command_fixture}
 
 @client.event
 async def on_message(message):
@@ -1348,7 +1404,7 @@ async def on_message(message):
     
     # Channel commands
     if  message.guild != None and msg_split[0] in channel_funcs:
-        await admin_funcs[msg_split[0]](message)
+        await channel_funcs[msg_split[0]](message)
         return
 
 @client.event
@@ -1359,7 +1415,7 @@ async def on_member_join(member):
         await member.edit(nick=name['ingame_name'])
         return
 
-    await member.add_roles(discord.utils.get(client.guilds[0].roles, id=role_unregistered_id))
+    await member.add_roles(discord.utils.get(guild.roles, id=role_unregistered_id))
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -1370,17 +1426,30 @@ async def on_raw_reaction_add(payload):
         if cursor.fetchone():
             return
 
-        user = discord.utils.get(client.guilds[0].members, id=payload.user_id)
+        user = discord.utils.get(guild.members, id=payload.user_id)
         await register(user)
 
 
 
 @client.event
 async def on_ready():
+    global guild
+
     print("Bot online")
+    guild = client.guilds[0]
+    print(guild.roles)
+
+    for i in range(20):
+        if i + 1 < 10:
+            number_emojis.append(discord.utils.get(guild.emojis, name=str(i + 1 ) + "_"))
+        else:
+            number_emojis.append(discord.utils.get(guild.emojis, name=str(i + 1 )))
+
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
     await update_roster()
     await update_signups()
+
+
 
 client.run(os.getenv('TOKEN'))
 
