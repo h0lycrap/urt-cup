@@ -669,6 +669,16 @@ def check_date_format(date_input):
     except ValueError:
         return False, None
 
+def check_time_format(time_input):
+    time_elems = time_input.split(':')
+
+    if len(time_elems) == 2 and time_elems[0].isnumeric() and 0 <= int(time_elems[0]) <= 23 and  time_elems[1].isnumeric() and 0 <= int(time_elems[1]) <= 59:
+
+        return True, datetime.time(int(time_elems[0]), int(time_elems[1]))
+    else:
+        return False, None
+
+
 async def command_info(message):
     # Check command validity
     if len(message.content) > len("!info") and message.content[len("!info")] != " ":
@@ -991,11 +1001,22 @@ async def command_fixture(message):
     fixture_category = discord.utils.get(guild.channels, id=category_match_schedule_id) 
     fixture_channel = await guild.create_text_channel(f"abcd┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category)
 
-    # TODO: add this into DB
+    
+
+    cursor.execute("INSERT INTO Fixtures (cup_id, team1, team2, format, channel_id) VALUES (%d, %s, %s, %s, %s)", (cup_toedit['id'], team1['tag'], team2['tag'], fixture_format, str(fixture_channel.id)))
+    conn.commit()
 
     # Send fixture card
-    embed = generate_fixture_embed(team1, team2)
+    fixture_id = cursor.lastrowid
+    embed = generate_fixture_embed(fixture_id)
     fixture_card = await fixture_channel.send(embed=embed)
+
+    print(fixture_id, fixture_card.id)
+
+    cursor.execute("UPDATE Fixtures SET embed_id=%s WHERE id = %d", (str(fixture_card.id), fixture_id))
+    conn.commit()
+
+    # Update db with embed id
 
     """
     # Map 1
@@ -1010,6 +1031,48 @@ async def command_fixture(message):
     embed = generate_fixture_embed(team1, team2, map1, map2)
     await message.channel.send(embed=embed)
     """
+
+async def command_schedule(message):
+    # permissions
+    if  not message.author.guild_permissions.manage_guild:
+        return
+
+    # Check args
+    args = message.content[len("!schedule"):].split()
+    if len(args) != 2:
+        await message.channel.send(alfred_quotes['cmdSchedule_error_args'])
+        return
+
+    # Check date
+    date_checked, date = check_date_format(args[0])
+    if not date_checked:
+        await message.channel.send(alfred_quotes['cmdSchedule_error_date'])
+        return
+
+    # Check time 
+    time_checked, time = check_time_format(args[1])
+    if not time_checked:
+        await message.channel.send(alfred_quotes['cmdSchedule_error_time'])
+        return
+
+    print(date)
+    date= date.replace(hour= time.hour, minute = time.minute)
+    print(date)
+
+
+
+    cursor.execute("UPDATE Fixtures SET date=%s WHERE channel_id = %s", (date, str(message.channel.id)))
+    conn.commit()
+
+    cursor.execute("SELECT * FROM Fixtures WHERE channel_id = %s", (str(message.channel.id),))
+    fixture_info = cursor.fetchone()
+
+
+    fixture_card = await message.channel.fetch_message(fixture_info['embed_id'])
+    embed = generate_fixture_embed(fixture_info['id'])
+    await fixture_card.edit(embed=embed)
+
+    await message.channel.send(alfred_quotes['cmdSchedule_confirmation'])
 
 ####################UPDATES#################################
 
@@ -1362,11 +1425,31 @@ async def generate_team_index_embed():
 
     return embed
 
-def generate_fixture_embed(team1, team2):
-    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description= "Group stage game")
+def generate_fixture_embed(fixture_id):
+
+    # Get Fixture info
+    cursor.execute("SELECT * FROM Fixtures WHERE id=%d", (fixture_id,))
+    fixture = cursor.fetchone()
+
+    # Get teams info
+    cursor.execute("SELECT * FROM Teams WHERE tag=%s", (fixture['team1'],))
+    team1 = cursor.fetchone()
+    cursor.execute("SELECT * FROM Teams WHERE tag=%s", (fixture['team2'],))
+    team2 = cursor.fetchone()
+
+    # Get date and time if set yet
+    if fixture['date']:
+        fixture_date_elems = fixture['date'].split(" ")
+        fixture_date = fixture_date_elems[0]
+        fixture_time = fixture_date_elems[1]
+    else:
+        fixture_date = "-"
+        fixture_time = "-"
+
+    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description= fixture['format'])
     embed.add_field(name=":pencil: Status", value= "-", inline=True)
-    embed.add_field(name=":calendar_spiral: Date", value= "-", inline=True)
-    embed.add_field(name=":alarm_clock: Time (CET)", value= "-", inline=True)
+    embed.add_field(name=":calendar_spiral: Date", value= fixture_date, inline=True)
+    embed.add_field(name=":alarm_clock: Time (CET)", value= fixture_time, inline=True)
     embed.add_field(name=":map: Map TS", value= f"-", inline=True)
     embed.add_field(name=":map: Map CTF", value= f"-", inline=True)
     embed.add_field(name=":link: Demo and MOSS", value= f"https://dev.urt.li", inline=True)
@@ -1380,6 +1463,9 @@ dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan, 
 
 # Commands executable in channels
 channel_funcs = {'!zmb' : command_zmb, '!lytchi' : command_lytchi ,'!st0mp' : command_st0mp, '!holy' : command_holycrap, '!urt5' : command_urt5, '!info' : command_info}
+
+# Match channel commands
+match_funcs = {'!schedule' : command_schedule}
 
 # Admin commands
 admin_funcs = {'!createcup': command_createcup, '!fixture': command_fixture}
@@ -1400,6 +1486,12 @@ async def on_message(message):
     # Admin commands
     if message.guild != None and message.channel.id == channel_log_id and msg_split[0] in admin_funcs and not (message.author.id in users_busy):
         await admin_funcs[msg_split[0]](message)
+        return
+
+    # match commands
+    fixture_category = discord.utils.get(guild.channels, id=category_match_schedule_id) 
+    if  message.guild != None and message.channel.category == fixture_category and msg_split[0] in match_funcs:
+        await match_funcs[msg_split[0]](message)
         return
     
     # Channel commands

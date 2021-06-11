@@ -109,5 +109,10 @@
 	"cmdSignup_error_tagnotexist" : "This clan tag does not exist.",
 	"cmdSignup_error_notcaptain" : "You are not the captain of that clan.",
 	"cmdSignup_success" : "You successfully signed up your clan {teamtag} to the cup ``{cupname}``.",
-	"cmdSignup_log" : "The clan {teamtag} signed up to the cup ``{cupname}``."
+	"cmdSignup_log" : "The clan {teamtag} signed up to the cup ``{cupname}``.",
+
+	"cmdSchedule_error_args" : "Please use the command as following: ``!schedule <date> <time (CET)>``",
+	"cmdSchedule_error_date" : "Invalid date format. Please use ``DD/MM/YYYY``",
+	"cmdSchedule_error_time" : "Invalid time format. Please use ``HH:MM``",
+	"cmdSchedule_confirmation" : "Match shceduled, check the updated match info at the top of the channel."
 }
