@@ -49,6 +49,7 @@ category_match_schedule_id = 835237146225934426
 max_players_per_team = 8
 
 users_busy = []
+fixtures_busy = []
 
 
 ###############COMMANDS########################################
@@ -1016,22 +1017,6 @@ async def command_fixture(message):
     cursor.execute("UPDATE Fixtures SET embed_id=%s WHERE id = %d", (str(fixture_card.id), fixture_id))
     conn.commit()
 
-    # Update db with embed id
-
-    """
-    # Map 1
-    cursor.execute("SELECT * FROM Maps;")
-    map_list = sorted(cursor.fetchall(), key = lambda x: re.sub('[^A-Za-z]+', '', x['name']).lower())
-    map1 = await generate_map_list_embed(map_list, "Map TS?", message)
-    map_list.remove(map1)
-
-    # Map2
-    map2 = await generate_map_list_embed(map_list, "Map CTF?", message)
-
-    embed = generate_fixture_embed(team1, team2, map1, map2)
-    await message.channel.send(embed=embed)
-    """
-
 async def command_schedule(message):
     # permissions
     if  not message.author.guild_permissions.manage_guild:
@@ -1055,24 +1040,95 @@ async def command_schedule(message):
         await message.channel.send(alfred_quotes['cmdSchedule_error_time'])
         return
 
-    print(date)
+    # Add time to date
     date= date.replace(hour= time.hour, minute = time.minute)
-    print(date)
 
-
-
+    # Update the date in the DB
     cursor.execute("UPDATE Fixtures SET date=%s WHERE channel_id = %s", (date, str(message.channel.id)))
     conn.commit()
 
+    # Update the embed
     cursor.execute("SELECT * FROM Fixtures WHERE channel_id = %s", (str(message.channel.id),))
     fixture_info = cursor.fetchone()
-
-
     fixture_card = await message.channel.fetch_message(fixture_info['embed_id'])
     embed = generate_fixture_embed(fixture_info['id'])
     await fixture_card.edit(embed=embed)
 
     await message.channel.send(alfred_quotes['cmdSchedule_confirmation'])
+
+
+async def command_pickban(message):
+    # Check if there is not another operation happening for this fixture
+    if message.channel.id in fixtures_busy:
+        return
+    fixtures_busy.append(message.channel.id)
+
+    # Get fixture info
+    cursor.execute("SELECT * FROM Fixtures WHERE channel_id = %s", (str(message.channel.id),))
+    fixture_info = cursor.fetchone()
+
+    # Get team1 and team2 info
+    cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (fixture_info['team1'],))
+    team1 = cursor.fetchone()
+    cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (fixture_info['team2'],))
+    team2 = cursor.fetchone()
+    clan_info_list = [team1, team2]
+
+    # Find out who won the knife fight
+    clan_choice = await generate_team_list_embed(clan_info_list, "The team who won the knife fight decides which team starts to ban a map for TS first (the other team will ban a map for CTF first). Which team will start banning a **TS map**?", message)
+    team_picking_ts_first = clan_choice
+    if clan_choice['tag'] == team1['tag']:
+        team_picking_ctf_first = team2
+    else:
+        team_picking_ctf_first = team1
+
+    # TODO : Change maps to ban to 6 and 4 when there will be 7 maps for each mode
+    # Check if BO2 (1 map per mode to pick) or BO5(2 maps per mode)
+    if (fixture_info['format'] == 'BO2'):
+        maps_to_ban = 2
+        maps_to_pick = 1
+    elif (fixture_info['format'] == 'BO5'):
+        maps_to_ban = 1
+        maps_to_pick = 2
+    else:
+        return
+
+    # Get map lists
+    cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('TS',))
+    ts_map_list = cursor.fetchall()
+    cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('CTF',))
+    ctf_map_list = cursor.fetchall()
+
+    # TODO: Check role and use text entry
+    # Pick TS Maps
+    ts_maps = []
+    for i in range(maps_to_ban):
+        banned_map = await generate_map_list_embed(ts_map_list, "TS - TO BAN :x:", message)
+        ts_map_list.remove(banned_map)
+        await message.channel.send(f":x: Banned: ``{banned_map['name']}``")
+    for i in range(maps_to_pick):
+        picked_map = await generate_map_list_embed(ts_map_list, "TS - TO PICK :white_check_mark:", message)
+        ts_maps.append(picked_map['name'])
+        ts_map_list.remove(picked_map)
+        await message.channel.send(f":white_check_mark: Picked: ``{picked_map['name']}``")
+
+    
+    # Pick TS Map
+    ctf_maps = []
+    for i in range(maps_to_ban):
+        banned_map = await generate_map_list_embed(ctf_map_list, "CTF - TO BAN :x:", message)
+        ctf_map_list.remove(banned_map)
+        await message.channel.send(f":x: Banned: ``{banned_map['name']}``")
+    for i in range(maps_to_pick):
+        picked_map = await generate_map_list_embed(ctf_map_list, "CTF - TO PICK :white_check_mark:", message)
+        ctf_maps.append(picked_map['name'])
+        ctf_map_list.remove(picked_map)
+        await message.channel.send(f":white_check_mark: Picked: ``{picked_map['name']}``")
+
+    # Remove busy status
+    fixtures_busy.remove(message.channel.id)
+
+
 
 ####################UPDATES#################################
 
@@ -1465,7 +1521,7 @@ dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan, 
 channel_funcs = {'!zmb' : command_zmb, '!lytchi' : command_lytchi ,'!st0mp' : command_st0mp, '!holy' : command_holycrap, '!urt5' : command_urt5, '!info' : command_info}
 
 # Match channel commands
-match_funcs = {'!schedule' : command_schedule}
+match_funcs = {'!schedule' : command_schedule, '!pickban' : command_pickban}
 
 # Admin commands
 admin_funcs = {'!createcup': command_createcup, '!fixture': command_fixture}
