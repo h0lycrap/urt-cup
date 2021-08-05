@@ -13,6 +13,10 @@ import datetime
 import re
 import asyncio
 
+# Temporary while discord.py 2.0 isnt out
+from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
+
+
 
 conn = mariadb.connect(
         user="dev",
@@ -61,13 +65,45 @@ async def command_zmb(message):
     await message.channel.send(embed=embed) 
 
 async def command_lytchi(message):
-    await message.channel.send(alfred_quotes['cmdLytchi'])
+    #await message.channel.send(alfred_quotes['cmdLytchi'])
+    await message.channel.send(content="Test boutons", components=[[Button(style=ButtonStyle.URL, label="Example link button", url="https://google.com"), Button(style=ButtonStyle.blue, label="Click me", custom_id="button"), Button(style=ButtonStyle.red, label="Should be aligned", emoji=u"\U00002705", custom_id="button2")]])
+
+@client.event
+async def on_button_click(interaction):
+    if interaction.component.id == "button":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='Button Clicked')
+        await interaction.channel.send(f"{interaction.user.name} clicked on the button")
+    if interaction.component.id == "button2":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='Button Clicked')
+        await interaction.channel.send(f"{interaction.user.name} clicked on the second button")
+
+@client.event
+async def on_select_option(interaction):
+    print(interaction.component)
+    if interaction.parent_component.id == "select":
+        await interaction.channel.send(content = f"{interaction.component[0].label} won the knife fight!")
+        await interaction.respond(type=6)
+
 
 async def command_st0mp(message):
     await message.channel.send(alfred_quotes['cmdSt0mp'])
 
 async def command_holycrap(message):
-    await message.channel.send(alfred_quotes['cmdHoly'])
+    #await message.channel.send(alfred_quotes['cmdHoly'])
+    await message.channel.send(
+        "Who won the knife fight?",
+        components = [
+            Select(
+                placeholder = "Select one team",
+                options = [
+                    SelectOption(label = "NoWay", emoji = u"\U0001F1EB\U0001F1F7", value = "NoWay"),
+                    SelectOption(label = "Quad", emoji = u"\U0001F1EE\U0001F1F9", value = "Quad")
+                ],
+                custom_id="select"
+            )
+        ]
+    )
+    
 
 async def command_urt5(message):
     await message.channel.send(alfred_quotes['cmdUrt5'])
@@ -1581,6 +1617,9 @@ async def on_raw_reaction_add(payload):
 
 @client.event
 async def on_ready():
+    # Temporary before discord py 2.0
+    DiscordComponents(client, change_discord_methods=True)
+
     global guild
 
     print("Bot online")
@@ -1596,6 +1635,8 @@ async def on_ready():
     await client.change_presence(activity=discord.Game(name="Server Manager")) 
     await update_roster()
     await update_signups()
+
+    
 
 
 
