@@ -42,3 +42,6 @@ def check_time_format(time_input):
         return True, datetime.time(int(time_elems[0]), int(time_elems[1]))
     else:
         return False, None
+
+def prevent_discord_formating(input_text):
+    return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_')

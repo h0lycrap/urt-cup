@@ -28,19 +28,28 @@ class Account(commands.Cog):
     async def on_button_click(self, interaction):
         if interaction.component.id == "button_register":
 
+            user = discord.utils.get(self.guild.members, id=interaction.user.id)
+
             # Check if user is already registered
             self.bot.cursor.execute("SELECT urt_auth FROM Users WHERE discord_id = %s;", (interaction.user.id,)) 
             if self.bot.cursor.fetchone():
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='User already registered')
                 return
-
-            user = discord.utils.get(self.guild.members, id=interaction.user.id)
+            
+            # Check if user is busy
+            if user.id in self.bot.users_busy:
+                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='You are already in the registration process, finish it in your dms')
+                return
+            
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='Check your dms!')
             await self.register(user)
         
 
     
     async def register(self, user):
+        #flag user as busy
+        self.bot.users_busy.append(user.id)
+
         def check(m):
                 return m.author.id == user.id and m.guild == None
 
@@ -63,7 +72,7 @@ class Account(commands.Cog):
                 await user.send(self.bot.quotes['cmdRegister_error_invalidauth'])
                 continue
 
-            if utils.check_auth(auth):
+            if not utils.check_auth(auth):
                 await user.send(self.bot.quotes['cmdRegister_error_authdoesntexist'])
                 continue
 
@@ -87,7 +96,7 @@ class Account(commands.Cog):
         while not country_checked:
             await user.send(self.bot.quotes['cmdRegister_prompt_country'])
             country_msg = await self.bot.wait_for('message', check=check)
-            country, country_checked = utils.check_flag_emoji(country_msg.content.strip())
+            country, country_checked = utils.check_flag_emoji(self.bot.cursor, country_msg.content.strip())
 
             if not country_checked:
                 await user.send(self.bot.quotes['cmdRegister_error_country'])
@@ -97,6 +106,9 @@ class Account(commands.Cog):
         self.bot.conn.commit()
         await user.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
+
+        # Remove busy status
+        self.bot.users_busy.remove(user.id)
 
         # Print on the log channel
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)

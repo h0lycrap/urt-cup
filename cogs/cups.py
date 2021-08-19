@@ -13,7 +13,6 @@ class Cups(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.guild = bot.guilds[0]
-        update.signups(bot)
 
     @commands.command() # TODO FORMAT ARGUMENT AND MAKE ADMIN
     async def createcup(self, ctx):

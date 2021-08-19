@@ -6,6 +6,7 @@ import os
 import mariadb
 import json
 import asyncio
+import cogs.common.update as update
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -13,7 +14,7 @@ from discord_components import DiscordComponents, Button, ButtonStyle, Interacti
 
 # Init bot and remove default help cmd
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='.', intents=intents) #discord.bot(intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents) #discord.bot(intents=intents)
 bot.remove_command('help')
 
 # Connect to DB
@@ -22,7 +23,7 @@ bot.conn = mariadb.connect(
         password=os.getenv('DBPASSWORD'),
         host=os.getenv('DBIP'),
         port=3306,
-        database='urtcup'
+        database='flawlessdb'
     )
 bot.cursor = bot.conn.cursor(dictionary=True)
 
@@ -48,16 +49,22 @@ bot.async_loop = asyncio.get_event_loop()
 #number_emojis = [u"\U00000031\U0000FE0F\U000020E3", u"\U00000032\U0000FE0F\U000020E3", u"\U00000033\U0000FE0F\U000020E3", u"\U00000034\U0000FE0F\U000020E3", u"\U00000035\U0000FE0F\U000020E3", u"\U00000036\U0000FE0F\U000020E3", u"\U00000037\U0000FE0F\U000020E3", u"\U00000038\U0000FE0F\U000020E3", u"\U00000039\U0000FE0F\U000020E3", u"\U0001F51F"]
 #letter_emojis = [u"\U0001F1E6", u"\U0001F1E7", u"\U0001F1E8", u"\U0001F1E9", u"\U0001F1EA", u"\U0001F1EB", u"\U0001F1EC", u"\U0001F1ED", u"\U0001F1EE", u"\U0001F1EF", u"\U0001F1F0", u"\U0001F1F1", u"\U0001F1F2", u"\U0001F1F2", u"\U0001F1F3", u"\U0001F1F4", u"\U0001F1F5", u"\U0001F1F6", u"\U0001F1F7", u"\U0001F1F8", u"\U0001F1F9", u"\U0001F1FA", u"\U0001F1FB", u"\U0001F1FC", u"\U0001F1FD", u"\U0001F1FE", u"\U0001F1FF"]
 bot.number_emojis = []
+
 bot.message_welcome_id = 838861660805791825
+
 bot.role_unregistered_id = 836897738796826645
 bot.role_captains_id = 839893529517228113
 bot.role_flawless_crew_id = 839651903298207816
 bot.role_cup_supervisor_id = 836901156642226196
+
 bot.channel_log_id = 834947952023437403
 bot.channel_roster_id = 834931256918802512
+bot.channel_panel_id = 877269587287236698
+
 bot.category_match_schedule_id = 835237146225934426
+
 bot.max_players_per_team = 8
-bot.user_busy = []
+bot.users_busy = []
 bot.fixtures_busy = []
 
 @bot.event
@@ -91,11 +98,21 @@ async def on_ready():
             bot.load_extension(f'cogs.{filename[:-3]}')
             print(f'{filename[:-3]} loaded')
 
+    # update
+    bot.async_loop.create_task(update.roster(bot))
+    bot.async_loop.create_task(update.signups(bot))
+
     print("Bot online")
-    welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
-    await welcome_chan.send(content="Test", components=[Button(style=ButtonStyle.green, label="Click here to register", custom_id="button_register")])
-
-
+    #welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
+    #await welcome_chan.send(content="Test", components=[Button(style=ButtonStyle.green, label="Click here to register", custom_id="button_register")])
+    '''
+    pannel_chan = discord.utils.get(bot.guilds[0].channels, id=bot.channel_panel_id)
+    await pannel_chan.send(content="Click on a button to perform an action", 
+                           components=[[
+                                Button(style=ButtonStyle.blue, label="Create a clan", custom_id="button_create_clan"),
+                                Button(style=ButtonStyle.grey, label="Edit a clan", custom_id="button_edit_clan")
+                                ]])
+    '''
 
 bot.run(os.getenv('TOKEN'))
 

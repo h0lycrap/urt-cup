@@ -53,6 +53,7 @@ def team(bot, tag, show_invited=False):
     country = flag.flagize(team['country'])
     captain = discord.utils.get(bot.guilds[0].members, id=int(team['captain']))
     name = team['name']
+    discord_link = team['discord_link']
 
      # Get the players for each team
     bot.cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (tag,))
@@ -108,9 +109,9 @@ def team(bot, tag, show_invited=False):
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
     if show_invited and roster_invited != "":
         embed.add_field(name="Invited", value=roster_invited, inline=False)
-    embed.add_field(name="Inactives", value=".", inline=False)
-    embed.add_field(name="Discord", value="https://discord.gg/HzkvFEs", inline=True) # Hardcoded for now
-    embed.add_field(name="Awards", value=":first_place: :second_place: :third_place:", inline=True) # Hardcoded for now
+    embed.add_field(name="Inactives", value="None", inline=False) # Hardcoded for now
+    embed.add_field(name="Discord", value=discord_link, inline=True)
+    embed.add_field(name="Awards", value="None", inline=True) # Hardcoded for now
 
     return embed, len(accepted_players) < mini_number_players
 
