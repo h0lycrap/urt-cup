@@ -1,6 +1,9 @@
 import requests
 import flag
 import datetime
+import re
+import emoji
+import mariadb
 
 # Check if the auth exists on urt.info
 def check_auth(auth):
@@ -45,3 +48,14 @@ def check_time_format(time_input):
 
 def prevent_discord_formating(input_text):
     return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_')
+
+# Check if there are any emojis in the message (custom or not)
+def emojis_in(text):
+    return len(re.findall(r'<:\w*:\d*>', text)) + emoji.emoji_count(text) > 0
+
+def ping_db(bot):
+    try:
+        bot.conn.ping()
+    except mariadb.DatabaseError:
+        print("The database has gone away -- reconnecting.")
+        bot.conn.reconnect()

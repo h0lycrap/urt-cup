@@ -7,6 +7,7 @@ import mariadb
 import json
 import asyncio
 import cogs.common.update as update
+import cogs.common.check as check
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -28,11 +29,14 @@ bot.conn = mariadb.connect(
 bot.cursor = bot.conn.cursor(dictionary=True)
 
 
-# Cogs cmds # TODO make them admin only
+# Cogs cmds 
 @bot.command()
+@check.is_guild_manager()
 async def load(ctx, extension):
     bot.load_extension(f'cogs.{extension}')
+
 @bot.command()
+@check.is_guild_manager()
 async def unload(ctx, extension):
     bot.unload_extension(f'cogs.{extension}')
 
@@ -104,7 +108,7 @@ async def on_ready():
 
     print("Bot online")
     #welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
-    #await welcome_chan.send(content="Test", components=[Button(style=ButtonStyle.green, label="Click here to register", custom_id="button_register")])
+    #await welcome_chan.send(content="Click on the button to register and unlock the rest of the discord:", components=[Button(style=ButtonStyle.green, label="Register", custom_id="button_register")])
     '''
     pannel_chan = discord.utils.get(bot.guilds[0].channels, id=bot.channel_panel_id)
     await pannel_chan.send(content="Click on a button to perform an action", 
@@ -119,12 +123,6 @@ bot.run(os.getenv('TOKEN'))
 
 # to delete 
 """
-
-# Commands executable in dm
-dm_funcs = {'!editclan' : command_editclan, '!createclan' : command_createclan, '!signup' : command_signup, '!info' : command_info}
-
-# Commands executable in channels
-channel_funcs = {'!info' : command_info}
 
 # Match channel commands
 match_funcs = {'!schedule' : command_schedule, '!pickban' : command_pickban}

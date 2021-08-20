@@ -46,6 +46,18 @@
 	"cmdEditClan_admin_addplayer_log" : "``{name}`` **was forced to join** the clan ``{teamname}`` by an admin",
 	"cmdEditClan_admin_accepted_cap" : "``{name}`` is now in the clan ``{teamname}``.",
 
+	"cmdEditPlayer_admin_error_auth" : "Invalid auth, please use ``!editplayer <urt_auth>``",
+
+	"cmdEditPlayer_update_name_prompt" : "Enter the new player ingame-name:\n*Type ``!cancel`` to cancel*",
+	"cmdEditPlayer_update_name_success" : "Player name updated!",
+	"cmdEditPlayer_update_name_log" : "The player ``{oldname}`` was renamed ``{newname}``",
+
+	"cmdEditPlayer_update_auth_prompt" : "Enter the new player auth:\n*Type ``!cancel`` to cancel*",
+	"cmdEditPlayer_update_auth_success" : "Player auth updated!",
+	"cmdEditPlayer_update_auth_log" : "The player ``{playername}``'s auth was changed from ``{oldauth}`` to ``{newauth}``",
+
+	"cmdEditPlayer_cancel" : "Player edition canceled.",
+
 	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",
 	"cmdAddPlayer_prompt_auth" : "Enter the list of urt auths of the players you want to add (separate each auth with a comma ``,`` if you want to add more than 1 player): \n*Type ``!cancel`` to cancel*",
 	"cmdAddPlayer_cancel" : "Player invitation canceled.",
@@ -83,6 +95,12 @@
 	"cmdUpdateDiscordLink_success" : "Clan discord updated.",
 	"cmdUpdateDiscordLink_log" : "The clan ``{teamname}`` updated its discord link to {newlink}",
 
+	"cmdUpdateTeamName_success" : "Clan name updated.",
+	"cmdUpdateTeamName_log" : "The clan ``{oldname}`` was renamed to ``{newname}``",
+
+	"cmdUpdateTeamTag_success" : "Clan tag updated.",
+	"cmdUpdateTeamTag_log" : "The tag of the clan ``{teamname}`` changed from ``{oldtag}`` to ``{newtag}``",
+
 	"cmdChangeCaptain_prompt_auth" : "Which player do you want to name new captain?",
 	"cmdChangeCaptain_cancel" : "Clan captain change canceled.",
 	"cmdChangeCaptain_error_alreadycap" : "You are already the captain of this clan.",
@@ -97,6 +115,12 @@
 	"cmdDeleteClan_prompt_cancel" : "Clan deletion canceled.",
 	"cmdDeleteClan_prompt_success" : "The clan ``{teamname}`` has been deleted.",
 	"cmdDeleteClan_log" : "The clan ``{teamname}`` was **deleted**",
+
+	"cmdDeletePlayerAdmin_intro" : "Are you sure you want to delete the player ``{playername}``?",
+	"cmdDeletePlayerAdmin_choice" : "Enter ``yes`` or ``no``:",
+	"cmdDeletePlayerAdmin_cancel" : "Player deletion canceled.",
+	"cmdDeletePlayerAdmin_prompt_success" : "Player deleted.",
+	"cmdDeletePlayerAdmin_prompt_log" : "The player ``{playername}`` has been deleted from the database and kicked.",
 
 	"cmdCreateCup_prompt_name" : "Enter the name of the cup:",
 	"cmdCreateCup_error_perm" : "You need to be an administrator to create a cup",

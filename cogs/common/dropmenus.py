@@ -9,16 +9,16 @@ def teams(clan_info_list, title, id):
 
     return [Select( placeholder = title, options = select_options, custom_id=id)]
 
-def players_of_team(bot, team_tag, id, include_captain=False, include_invited=False): 
+def players_of_team(bot, team_id, id, include_captain=False, include_invited=False): 
     # Get the players for each team
-    bot.cursor.execute("SELECT * FROM Roster WHERE team_tag = %s;", (team_tag,))
+    bot.cursor.execute("SELECT * FROM Roster WHERE team_id = %s;", (team_id,))
     players = bot.cursor.fetchall()
     player_info_list = []
     for i, player in enumerate(players):
         # Exclude captain 
         if (not include_captain and player['accepted'] == 2) or (not include_invited and player['accepted'] == 0):
             continue
-        bot.cursor.execute("SELECT* FROM Users WHERE ingame_name = %s;", (player['player_name'],))
+        bot.cursor.execute("SELECT* FROM Users WHERE id = %s;", (player['player_id'],))
         player_info_list.append(bot.cursor.fetchone())
 
     select_options = []

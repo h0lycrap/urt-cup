@@ -14,7 +14,7 @@ def player(bot, auth):
     embed.set_thumbnail(url=ds_player.avatar_url)
 
     # Get player's teams
-    bot.cursor.execute("SELECT team_tag, accepted FROM Roster WHERE player_name=%s", (player['ingame_name'],))
+    bot.cursor.execute("SELECT team_id, accepted FROM Roster WHERE player_id=%s", (player['id'],))
     teams = bot.cursor.fetchall()
 
     # If the player is in no team
@@ -25,20 +25,20 @@ def player(bot, auth):
         teams_str=""
         for team in teams:
             # Get team country
-            bot.cursor.execute("SELECT country FROM Teams WHERE tag=%s", (team['team_tag'],))
-            country = bot.cursor.fetchone()
+            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team['team_id'],))
+            team_info = bot.cursor.fetchone()
 
             # If he is a member of the team
             if int(team['accepted']) == 1:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']}\n"
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']}\n"
 
             # If he is the captain of the team
             elif int(team['accepted']) == 2:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']} (Captain)\n"
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']} (Captain)\n"
 
             # If he is inactive
             elif int(team['accepted']) == 3:
-                teams_str += f"{flag.flagize(country['country'])} \u200b {team['team_tag']} (Inactive)\n" 
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']} (Inactive)\n" 
 
     embed.add_field(name="Clans", value= teams_str, inline=True)
 
@@ -51,12 +51,16 @@ def team(bot, tag, show_invited=False):
     bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (tag,))
     team = bot.cursor.fetchone()
     country = flag.flagize(team['country'])
-    captain = discord.utils.get(bot.guilds[0].members, id=int(team['captain']))
+    #captain = discord.utils.get(bot.guilds[0].members, id=int(team['captain']))
     name = team['name']
     discord_link = team['discord_link']
 
+    # Get captain info
+    bot.cursor.execute("SELECT * FROM Users WHERE id=%s", (team['captain'],))
+    captain = bot.cursor.fetchone()
+
      # Get the players for each team
-    bot.cursor.execute("SELECT player_name, accepted FROM Roster WHERE team_tag = %s;", (tag,))
+    bot.cursor.execute("SELECT player_id, accepted FROM Roster WHERE team_id = %s;", (team['id'],))
     players = bot.cursor.fetchall()
 
     # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
@@ -72,7 +76,7 @@ def team(bot, tag, show_invited=False):
     for i, player in enumerate(accepted_players):
 
         # Get player country flag and urt auth
-        bot.cursor.execute("SELECT urt_auth, country FROM Users WHERE ingame_name = %s;", (player['player_name'],))
+        bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player['player_id'],))
         player_info = bot.cursor.fetchone()
         if not player_info:
             player_auth_str = "urtauth"
@@ -81,7 +85,7 @@ def team(bot, tag, show_invited=False):
             player_auth_str = player_info['urt_auth']
             player_flag_str = player_info['country']
 
-        player_string = f"{flag.flagize(player_flag_str)} {player['player_name']} ``[{player_auth_str}]``\n"
+        player_string = f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
         # Check if we add in the first column or the second one
         if i <= 3 or len(accepted_players) < mini_number_players:
             roster_str1 += player_string
@@ -91,7 +95,7 @@ def team(bot, tag, show_invited=False):
     # Invited players loop
     for i, player in enumerate(invited_players):
         # Get player country flag and urt auth
-        bot.cursor.execute("SELECT urt_auth, country FROM Users WHERE ingame_name = %s;", (player['player_name'],))
+        bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player['player_id'],))
         player_info = bot.cursor.fetchone()
         if not player_info:
             player_auth_str = "urtauth"
@@ -100,11 +104,11 @@ def team(bot, tag, show_invited=False):
             player_auth_str = player_info['urt_auth']
             player_flag_str = player_info['country']
 
-        roster_invited += f"{flag.flagize(player_flag_str)} {player['player_name']} ``[{player_auth_str}]``\n"
+        roster_invited += f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
 
     # Create embed
     embed=discord.Embed(title=f"{name} {country}", color=13695009)
-    embed.add_field(name=f"**Captain: **{captain.display_name}     |     **Tag: **{tag}", value= "\u200b", inline=False)
+    embed.add_field(name=f"**Captain: **{captain['ingame_name']}     |     **Tag: **{tag}", value= "\u200b", inline=False)
     embed.add_field(name="Members [auth] ", value= roster_str1, inline=True)
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
     if show_invited and roster_invited != "":
