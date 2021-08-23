@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from datetime import datetime
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -12,9 +13,10 @@ class Test(commands.Cog):
     @commands.command()
     async def zmb(self, ctx):
         zmb = discord.utils.get(self.bot.guilds[0].members, id=205821831964393472)
-        embed=discord.Embed(title="Va dormir Zmb", color=0x9b2ab2)
+        embed=discord.Embed(title="Go to sleep Zmb!", color=0x9b2ab2)
         embed.set_thumbnail(url=zmb.avatar_url)
         await ctx.send(embed=embed)
+        print(datetime.now(), ctx.message.created_at)
     
     
 

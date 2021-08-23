@@ -64,6 +64,10 @@ class Clans(commands.Cog):
                 await self.remove_player(clan_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_clan_changecaptain"):
                 await self.change_clan_captain(clan_to_edit, user, interaction)
+            elif interaction.component.id.startswith("button_edit_clan_addinactive"):
+                await self.add_inactive(clan_to_edit, user, interaction)
+            elif interaction.component.id.startswith("button_edit_clan_removeinactive"):
+                await self.remove_inactive(clan_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_clan_changediscord"):
                 await self.update_discord_link(clan_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_clan_changeflag"):
@@ -77,10 +81,28 @@ class Clans(commands.Cog):
 
             # Update the roster
             self.bot.async_loop.create_task(update.roster(self.bot))
+            self.bot.async_loop.create_task(update.signups(self.bot))
+
+        if interaction.component.id == "button_leave_clan":
+            # List clans where the player is
+            self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id = %s AND (accepted=1 OR accepted=3);", (user_info['id'],))
+            clans = self.bot.cursor.fetchall()
+            clan_infos = []
+            for clan in clans:
+                self.bot.cursor.execute("SELECT * FROM Teams WHERE id = %s;", (clan['team_id'],))
+                clan_infos.append(self.bot.cursor.fetchone())
+
+            # Cant leave any clan 
+            if not clans:
+                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_error_noclan'])
+                return
+
+            # Get which clan to leave
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Which clan do you want to leave?", components=dropmenus.teams(clan_infos, None,  "dropmenu_teamtoleave"))
 
     @commands.Cog.listener() 
     async def on_select_option(self, interaction):
-        utils.ping_db(self.bot)
+        #utils.ping_db(self.bot)
         
         if interaction.parent_component.id == "dropmenu_teamtoedit":
             user = discord.utils.get(self.guild.members, id=interaction.user.id)
@@ -102,6 +124,10 @@ class Clans(commands.Cog):
                                     Button(style=ButtonStyle.blue, label="Change captain", custom_id=f"button_edit_clan_changecaptain_{clan_to_edit['tag']}"),
                                 ],
                                 [
+                                    Button(style=ButtonStyle.grey, label="Add inactive", custom_id=f"button_edit_clan_addinactive_{clan_to_edit['tag']}"),
+                                    Button(style=ButtonStyle.grey, label="Remove inactive", custom_id=f"button_edit_clan_removeinactive_{clan_to_edit['tag']}"),
+                                ],
+                                [
                                     Button(style=ButtonStyle.grey, label="Change discord", custom_id=f"button_edit_clan_changediscord_{clan_to_edit['tag']}"),
                                     Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(clan_to_edit['country']), custom_id=f"button_edit_clan_changeflag_{clan_to_edit['tag']}"),
                                 ],
@@ -109,6 +135,52 @@ class Clans(commands.Cog):
                                     Button(style=ButtonStyle.grey, label="Change clan name", custom_id=f"button_edit_clan_changename_{clan_to_edit['tag']}"),
                                     Button(style=ButtonStyle.grey, label="Change tag", custom_id=f"button_edit_clan_changetag_{clan_to_edit['tag']}")
                                 ]])
+
+        if interaction.parent_component.id == "dropmenu_teamtoleave":
+            user = discord.utils.get(self.guild.members, id=interaction.user.id)
+            # Get user info
+            self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (interaction.user.id,))
+            user_info = self.bot.cursor.fetchone()
+
+            # Get user's clan
+            self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id = %s AND (accepted=1 OR accepted=3);", (user_info['id'],))
+            clans = self.bot.cursor.fetchall()
+            clan_to_leave = clans[int(interaction.component[0].value)]
+
+            # Get clan info
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE id = %s", (clan_to_leave['team_id'],))
+            clan_info = self.bot.cursor.fetchone()
+
+            # Ask confirmation
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_confirmation'].format(clanname=clan_info['name']), components=[[
+                                        Button(style=ButtonStyle.green, label="Yes", custom_id="button_leaveclan_yes"),
+                                        Button(style=ButtonStyle.red, label="No", custom_id="button_leaveclan_no"),]])
+            interaction_leaveclanconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == user.id and i.component.id.startswith("button_leaveclan_"))
+
+            if interaction_leaveclanconfirmation.component.id == 'button_leaveclan_no':
+                await interaction_leaveclanconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_cancel'])
+                return
+            if interaction_leaveclanconfirmation.component.id == 'button_leaveclan_yes':
+                #Leave the clan
+                self.bot.cursor.execute("DELETE FROM Roster WHERE player_id=%s AND team_id=%s", (user_info['id'], clan_info['id']))
+                self.bot.conn.commit()
+
+                # Remove team role from player
+                player_leaving = discord.utils.get(self.guild.members, id=int(user_info['discord_id']))
+                team_role = discord.utils.get(self.guild.roles, id=int(clan_info['role_id']))
+                await player_leaving.remove_roles(team_role)
+
+                # Notify
+                await interaction_leaveclanconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_success'].format(clanname=clan_info['name']))
+
+                # Print on the log channel
+                log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+                await log_channel.send(content=self.bot.quotes['cmdLeaveClan_log'].format(playername = user_info['ingame_name'], teamname=clan_info['name']))
+
+                # Update the roster
+                self.bot.async_loop.create_task(update.roster(self.bot))
+
+
 
     async def createclan(self, user):
         # Flag the user as busy
@@ -215,7 +287,7 @@ class Clans(commands.Cog):
         self.bot.users_busy.remove(user.id)
 
         # Update roster
-        await update.roster(self.bot)
+        self.bot.async_loop.create_task(update.roster(self.bot))
 
     async def add_player(self, team_toedit, user, interaction, is_admin=False):
         # Flag the user as busy
@@ -284,7 +356,6 @@ class Clans(commands.Cog):
                 self.bot.conn.commit()
 
                 await user.send(self.bot.quotes['cmdEditClan_admin_accepted_cap'].format(name=player_toadd['ingame_name'], teamname=team_toedit['name']))
-                await update.roster(self.bot)
 
                 # Add team role to player
                 team_role = discord.utils.get(self.guild.roles, id=int(team_toedit['role_id']))
@@ -302,7 +373,7 @@ class Clans(commands.Cog):
         player_topm = discord.utils.get(self.guild.members, id=int(player_toadd['discord_id']))
         captain = discord.utils.get(self.guild.members, id=int(user.id)) 
 
-        await player_topm.send(self.bot.quotes['cmdAddPlayer_invite'].format(captain=captain.display_name, teamname=team_toedit['name']), components=[[
+        invite_message = await player_topm.send(self.bot.quotes['cmdAddPlayer_invite'].format(captain=captain.display_name, teamname=team_toedit['name']), components=[[
                                     Button(style=ButtonStyle.green, label="Accept", custom_id="button_invite_accept"),
                                     Button(style=ButtonStyle.red, label="Decline", custom_id="button_invite_decline"),]])
 
@@ -312,6 +383,11 @@ class Clans(commands.Cog):
 
         # Wait for button press 
         interaction_inviteresponse = await self.bot.wait_for("button_click", check = lambda i: i.user.id == player_topm.id and i.component.id.startswith("button_invite_"))
+
+        # Disable invite buttons
+        await invite_message.edit(self.bot.quotes['cmdAddPlayer_invite'].format(captain=captain.display_name, teamname=team_toedit['name']), components=[[
+                                    Button(style=ButtonStyle.green, label="Accept", custom_id="button_invite_accept", disabled=True),
+                                    Button(style=ButtonStyle.red, label="Decline", custom_id="button_invite_decline", disabled=True),]])
 
         # Check if the player was still invited
         self.bot.cursor.execute("SELECT id FROM Roster WHERE accepted=0 AND team_id = %s AND player_id=%s;", (team_toedit['id'], player_toadd['id']))
@@ -326,7 +402,7 @@ class Clans(commands.Cog):
 
             await captain.send(self.bot.quotes['cmdAddPlayer_accepted_cap'].format(name=player_toadd['ingame_name'], teamname=team_toedit['name']))
             await interaction_inviteresponse.respond(type=InteractionType.ChannelMessageWithSource, ephemeral=False, content=self.bot.quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit['name']))
-            await update.roster(self.bot)
+            self.bot.async_loop.create_task(update.roster(self.bot))
 
             # Add team role to player
             team_role = discord.utils.get(self.guild.roles, id=int(team_toedit['role_id']))
@@ -349,7 +425,7 @@ class Clans(commands.Cog):
     async def remove_player(self, team_toedit, user, interaction):
 
         # Get which player to remove
-        player_info_list, dropmenu_playertoremove = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_to_remove", include_invited=True)
+        player_info_list, dropmenu_playertoremove = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_to_remove", include_invited=True, include_inactive=True)
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Which player do you want to remove from your clan?", components=dropmenu_playertoremove)
         interaction_removeplayer = await self.bot.wait_for("select_option", check = lambda i: i.user.id == user.id and i.parent_component.id == "dropmenu_player_to_remove")
         player_toremove = player_info_list[int(interaction_removeplayer.component[0].value)]
@@ -370,7 +446,6 @@ class Clans(commands.Cog):
             self.bot.conn.commit()
 
             await interaction_removeplayerconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeletePlayer_success'].format(name=player_toremove['ingame_name']))
-            self.bot.async_loop.create_task(update.roster(self.bot))
 
             # Remove team role from player
             player_topm = discord.utils.get(self.guild.members, id=int(player_toremove['discord_id']))
@@ -383,6 +458,78 @@ class Clans(commands.Cog):
             # Print on the log channel
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdDeletePlayer_log'].format(name=player_toremove['ingame_name'], teamname=team_toedit['name']))
+
+    async def add_inactive(self, team_toedit, user, interaction):
+
+        # Get which player to add as inactive
+        player_info_list, dropmenu_playertoaddinactive = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_to_add_inactive")
+
+        # Check if there are no player to set as inactive
+        if len(player_info_list) == 0:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No player to set as inactive")
+            return
+
+
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Which player do you want to set as inactive?", components=dropmenu_playertoaddinactive)
+        interaction_addinactive = await self.bot.wait_for("select_option", check = lambda i: i.user.id == user.id and i.parent_component.id == "dropmenu_player_to_add_inactive")
+        player_addinactive = player_info_list[int(interaction_addinactive.component[0].value)]
+
+        # Ask confirmation
+        await interaction_addinactive.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddInactive_confirmation'].format(name=player_addinactive['ingame_name'], teamname=team_toedit['name']), components=[[
+                                    Button(style=ButtonStyle.green, label="Yes", custom_id="button_addinactive_yes"),
+                                    Button(style=ButtonStyle.red, label="No", custom_id="button_addinactive_no"),]])
+        interaction_addinactiveconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == user.id and i.component.id.startswith("button_addinactive_"))
+
+        if interaction_addinactiveconfirmation.component.id == 'button_addinactive_no':
+            await interaction_addinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddInactive_cancel'])
+            return
+        
+        if interaction_addinactiveconfirmation.component.id == 'button_addinactive_yes':
+            # Set as inactive
+            self.bot.cursor.execute("UPDATE Roster SET accepted = 3 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_addinactive['id']))
+            self.bot.conn.commit()
+
+            await interaction_addinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddInactive_success'].format(name=player_addinactive['ingame_name']))
+
+            # Print on the log channel
+            log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+            await log_channel.send(self.bot.quotes['cmdAddInactive_log'].format(name=player_addinactive['ingame_name'], teamname=team_toedit['name']))
+
+    async def remove_inactive(self, team_toedit, user, interaction):
+
+        # Get which player to remove as inactive
+        player_info_list, dropmenu_playertoremoveinactive = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_to_remove_inactive", include_members=False, include_inactive=True)
+        
+        # Check if there are no player to set as inactive
+        if len(player_info_list) == 0:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No player to remove from inactives")
+            return
+
+
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Which player do you want to remove from inactives?", components=dropmenu_playertoremoveinactive)
+        interaction_removeinactive = await self.bot.wait_for("select_option", check = lambda i: i.user.id == user.id and i.parent_component.id == "dropmenu_player_to_remove_inactive")
+        player_addinactive = player_info_list[int(interaction_removeinactive.component[0].value)]
+
+        # Ask confirmation
+        await interaction_removeinactive.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdRemoveInactive_confirmation'].format(name=player_addinactive['ingame_name'], teamname=team_toedit['name']), components=[[
+                                    Button(style=ButtonStyle.green, label="Yes", custom_id="button_removeinactive_yes"),
+                                    Button(style=ButtonStyle.red, label="No", custom_id="button_removeinactive_no"),]])
+        interaction_removeinactiveconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == user.id and i.component.id.startswith("button_removeinactive_"))
+
+        if interaction_removeinactiveconfirmation.component.id == 'button_removeinactive_no':
+            await interaction_removeinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdRemoveInactive_cancel'])
+            return
+        
+        if interaction_removeinactiveconfirmation.component.id == 'button_removeinactive_yes':
+            # Remove as inactive
+            self.bot.cursor.execute("UPDATE Roster SET accepted = 1 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_addinactive['id']))
+            self.bot.conn.commit()
+
+            await interaction_removeinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdRemoveInactive_success'].format(name=player_addinactive['ingame_name']))
+
+            # Print on the log channel
+            log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+            await log_channel.send(self.bot.quotes['cmdRemoveInactive_log'].format(name=player_addinactive['ingame_name'], teamname=team_toedit['name']))
 
 
     async def update_team_flag(self, team_toedit, user, interaction): 
@@ -419,7 +566,6 @@ class Clans(commands.Cog):
 
         self.bot.cursor.execute("UPDATE Teams SET country=%s WHERE tag=%s", (serialized_country, team_toedit['tag']))
         self.bot.conn.commit()
-        self.bot.async_loop.create_task(update.roster(self.bot))
 
         await user.send(self.bot.quotes['cmdUpdateFlag_success'])
 
@@ -459,7 +605,6 @@ class Clans(commands.Cog):
 
         self.bot.cursor.execute("UPDATE Teams SET discord_link=%s WHERE tag=%s", (link, team_toedit['tag']))
         self.bot.conn.commit()
-        self.bot.async_loop.create_task(update.roster(self.bot))
 
         await user.send(self.bot.quotes['cmdUpdateDiscordLink_success'])
 
@@ -469,7 +614,7 @@ class Clans(commands.Cog):
 
     async def change_clan_captain(self, team_toedit, user, interaction): 
         # Get which player for new cap
-        player_info_list, dropmenu_newcap = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_newcaptain")
+        player_info_list, dropmenu_newcap = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_newcaptain", include_inactive=True)
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeCaptain_prompt_auth'], components=dropmenu_newcap)
         interaction_newcaptain = await self.bot.wait_for("select_option", check = lambda i: i.user.id == user.id and i.parent_component.id == "dropmenu_player_newcaptain")
         new_captain = player_info_list[int(interaction_newcaptain.component[0].value)]
@@ -506,7 +651,6 @@ class Clans(commands.Cog):
             if not self.bot.cursor.fetchone():
                 await prev_captain.remove_roles(captain_role)
 
-            self.bot.async_loop.create_task(update.roster(self.bot))
             await interaction_changecaptainconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeCaptain_success'].format(name=new_captain['ingame_name']))
 
             # Notify new captain
@@ -556,6 +700,10 @@ class Clans(commands.Cog):
             self.bot.cursor.execute("DELETE FROM Roster WHERE team_id = %s;", (team_toedit['id'],))
             self.bot.conn.commit()
 
+            # Delete from signups
+            self.bot.cursor.execute("DELETE FROM Signups WHERE team_id = %s;", (team_toedit['id'],))
+            self.bot.conn.commit()
+
             
 
             # Get prev captain info
@@ -574,11 +722,6 @@ class Clans(commands.Cog):
             # Print on the log channel
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdDeleteClan_log'].format(teamname=team_toedit['name']))
-
-            # Update roster
-            await update.roster(self.bot)
-
-            return
 
     async def update_team_name(self, team_toedit, user, interaction): 
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Check your dms!")
@@ -617,7 +760,6 @@ class Clans(commands.Cog):
 
         self.bot.cursor.execute("UPDATE Teams SET name=%s WHERE tag=%s", (teamname, team_toedit['tag']))
         self.bot.conn.commit()
-        self.bot.async_loop.create_task(update.roster(self.bot))
 
         await user.send(self.bot.quotes['cmdUpdateTeamName_success'])
 
@@ -662,7 +804,6 @@ class Clans(commands.Cog):
 
         self.bot.cursor.execute("UPDATE Teams SET tag=%s WHERE tag=%s", (tag, team_toedit['tag']))
         self.bot.conn.commit()
-        self.bot.async_loop.create_task(update.roster(self.bot))
 
         await user.send(self.bot.quotes['cmdUpdateTeamTag_success'])
 
@@ -694,6 +835,10 @@ class Clans(commands.Cog):
                                 Button(style=ButtonStyle.green, label="Add a player", custom_id=f"button_edit_clan_addplayer_admin_{clan_to_edit['tag']}"),
                                 Button(style=ButtonStyle.blue, label="Remove a player", custom_id=f"button_edit_clan_removeplayer_admin_{clan_to_edit['tag']}"),
                                 Button(style=ButtonStyle.blue, label="Change captain", custom_id=f"button_edit_clan_changecaptain_admin_{clan_to_edit['tag']}"),
+                            ],
+                            [
+                                Button(style=ButtonStyle.grey, label="Add inactive", custom_id=f"button_edit_clan_addinactive_admin_{clan_to_edit['tag']}"),
+                                Button(style=ButtonStyle.grey, label="Remove inactive", custom_id=f"button_edit_clan_removeinactive_admin_{clan_to_edit['tag']}"),
                             ],
                             [
                                 Button(style=ButtonStyle.grey, label="Change discord", custom_id=f"button_edit_clan_changediscord_admin_{clan_to_edit['tag']}"),

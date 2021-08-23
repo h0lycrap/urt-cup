@@ -1,5 +1,10 @@
 import discord
 import cogs.common.embeds as embeds
+from datetime import datetime, timedelta
+
+
+# Temporary while discord.py 2.0 isnt out
+from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component, interaction
 
 async def roster(bot):
     # Get channel
@@ -57,19 +62,31 @@ async def signups(bot):
     signup_channel = discord.utils.get(bot.guilds[0].channels, id=836895695269134386)
 
     # Get all cups
-    bot.cursor.execute("SELECT id, signup_message_id FROM Cups;")
+    bot.cursor.execute("SELECT * FROM Cups;")
     for cup_info in bot.cursor.fetchall():
 
         # Generate the embed
         embed = embeds.signup(bot, cup_info['id'])
 
+        signup_start_date = datetime.strptime(cup_info['signup_start_date'], '%Y-%m-%d %H:%M:%S')
+        signup_end_date = datetime.strptime(cup_info['signup_end_date'], '%Y-%m-%d %H:%M:%S')
+
+        # Check if the signup are open or if cup is full
+        bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d", (cup_info['id'],))
+        teams_signedup = bot.cursor.fetchall()
+
+        if not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)) or len(teams_signedup) >= cup_info['number_of_teams']:
+            signup_button = [Button(style=ButtonStyle.grey, disabled=True, label="Signup closed", custom_id=f"button_signup_{cup_info['id']}")]
+        else:
+            signup_button = [Button(style=ButtonStyle.green, label="Signup", custom_id=f"button_signup_{cup_info['id']}")]
+
         # Check if there is a message id stored
         try:
             signup_message = await signup_channel.fetch_message(cup_info['signup_message_id'])
-            await signup_message.edit(embed=embed)
+            await signup_message.edit(embed=embed, components=signup_button)
 
         except:
             # Send new message and store message id
-            new_signup_msg = await signup_channel.send(embed=embed)
+            new_signup_msg = await signup_channel.send(embed=embed, components=signup_button)
             bot.cursor.execute("UPDATE Cups SET signup_message_id=%s WHERE id=%s", (str(new_signup_msg.id), cup_info['id']))
             bot.conn.commit()

@@ -16,11 +16,12 @@ class Account(commands.Cog):
 
     @commands.Cog.listener() 
     async def on_message(self, message):
-        utils.ping_db(self.bot)
+        #utils.ping_db(self.bot)
+        pass
 
     @commands.Cog.listener() 
     async def on_button_click(self, interaction):
-        utils.ping_db(self.bot)
+        #utils.ping_db(self.bot)
         user = discord.utils.get(self.guild.members, id=interaction.user.id)
 
         if interaction.component.id == "button_register":

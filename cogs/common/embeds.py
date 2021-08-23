@@ -66,6 +66,29 @@ def team(bot, tag, show_invited=False):
     # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
     accepted_players = list(filter(lambda x: x['accepted'] != 0, players))
 
+    # Get the members 
+    members = list(filter(lambda x: x['accepted'] == 1 or x['accepted'] == 2, accepted_players))
+
+    # Get the inactives 
+    inactives= list(filter(lambda x: x['accepted'] == 3, accepted_players))
+
+    # Get inactive name list
+    if len(inactives) == 0:
+        inactive_string = "None"
+    else:
+        inactive_string = ""
+        for inactive in inactives[:-1]:
+
+            # Get inactive info
+            bot.cursor.execute("SELECT * FROM Users Where id=%s", (inactive['player_id'],))
+            inactive_info = bot.cursor.fetchone()
+            inactive_string += f"{flag.flagize(inactive_info['country'])} {inactive_info['ingame_name']}, "
+
+        bot.cursor.execute("SELECT * FROM Users Where id=%s", (inactives[-1]['player_id'],))
+        inactive_info = bot.cursor.fetchone()
+        inactive_string += f"{flag.flagize(inactive_info['country'])} {inactive_info['ingame_name']}"
+
+
     # Get the list of invited players
     invited_players = list(filter(lambda x: x['accepted'] == 0, players))
 
@@ -73,7 +96,7 @@ def team(bot, tag, show_invited=False):
     roster_str1 = ""
     roster_str2 = "\u200b"
     roster_invited = ""
-    for i, player in enumerate(accepted_players):
+    for i, player in enumerate(members):
 
         # Get player country flag and urt auth
         bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player['player_id'],))
@@ -87,7 +110,7 @@ def team(bot, tag, show_invited=False):
 
         player_string = f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
         # Check if we add in the first column or the second one
-        if i <= 3 or len(accepted_players) < mini_number_players:
+        if i <= 3 or len(members) < mini_number_players:
             roster_str1 += player_string
         else:
             roster_str2 += player_string
@@ -113,7 +136,7 @@ def team(bot, tag, show_invited=False):
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
     if show_invited and roster_invited != "":
         embed.add_field(name="Invited", value=roster_invited, inline=False)
-    embed.add_field(name="Inactives", value="None", inline=False) # Hardcoded for now
+    embed.add_field(name="Inactives", value=inactive_string, inline=False)
     embed.add_field(name="Discord", value=discord_link, inline=True)
     embed.add_field(name="Awards", value="None", inline=True) # Hardcoded for now
 
@@ -209,38 +232,38 @@ def signup(bot, cup_id):
     signup_end_date = datetime.datetime.strptime(cup_info['signup_end_date'], '%Y-%m-%d %H:%M:%S')
 
     # Fetch signed up teams
-    bot.cursor.execute("SELECT team_tag FROM Signups WHERE cup_id=%d", (cup_id,))
-    team_tags = bot.cursor.fetchall()
+    bot.cursor.execute("SELECT team_id FROM Signups WHERE cup_id=%d", (cup_id,))
+    team_ids = bot.cursor.fetchall()
 
     team_string = ""
     tag_string = ""
 
     #Create embed field content
-    if team_tags:
-        for i, team_tag in enumerate(team_tags):
+    if team_ids:
+        for i, team_id in enumerate(team_ids):
             # Get team info
-            bot.cursor.execute("SELECT name, country FROM Teams WHERE tag=%s", (team_tag['team_tag'],))
+            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_id['team_id'],))
             team_info = bot.cursor.fetchone()
             team_name = team_info['name']
             team_flag = flag.flagize(team_info['country'])
-            team_tag_str = utils.prevent_discord_formating(team_tag['team_tag'])
+            team_tag_str = utils.prevent_discord_formating(team_info['tag'])
             index_str = str(i + 1) + "."
 
             team_string += f"``{index_str.ljust(3)}`` {team_flag} {team_name}\n"
             tag_string += f"{team_tag_str}\n"
 
-        spots_available = max_number_of_teams - len(team_tags)
+        spots_available = max_number_of_teams - len(team_ids)
     else:
         spots_available = max_number_of_teams 
 
     # Fill empty spots
     for i in range(spots_available):
-        index_str = str(i + len(team_tags) + 1) + "."
+        index_str = str(i + len(team_ids) + 1) + "."
         team_string += f"``{index_str.ljust(3)}`` \u200b \u200b\u200b \u200b\u200b \u200b \u200b \u200b \u200b \u200b\n"
         tag_string += "\u200b \n"
 
     # Signup dates
-    signup_string = f"__{signup_start_date.strftime('%a')} {signup_start_date.strftime('%b')} {signup_start_date.day}__ to __{signup_end_date.strftime('%a')} {signup_end_date.strftime('%b')} {signup_end_date.day}__"
+    signup_string = f"__{signup_start_date.strftime('%a')} {signup_start_date.strftime('%b')} {signup_start_date.day} {signup_start_date.year}__ to __{signup_end_date.strftime('%a')} {signup_end_date.strftime('%b')} {signup_end_date.day} {signup_end_date.year}__"
 
     # Create the embed
     embed = discord.Embed(title=f":trophy: {cup_name}", color=0xFFD700, description="Open cup")

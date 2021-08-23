@@ -107,16 +107,33 @@ async def on_ready():
     bot.async_loop.create_task(update.signups(bot))
 
     print("Bot online")
-    #welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
-    #await welcome_chan.send(content="Click on the button to register and unlock the rest of the discord:", components=[Button(style=ButtonStyle.green, label="Register", custom_id="button_register")])
-    '''
+    welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
+    #await welcome_chan.send(content=":interrobang:  **Invite your mates :** \n             Feel free to use this permanent link : https://discord.gg/DBJjn3erzz")
+    #await welcome_chan.send(content="\u200b", components=[Button(style=ButtonStyle.green, label="Click here to register", custom_id="button_register")])
+
+    
     pannel_chan = discord.utils.get(bot.guilds[0].channels, id=bot.channel_panel_id)
-    await pannel_chan.send(content="Click on a button to perform an action", 
+    '''
+    await pannel_chan.send(content=":white_check_mark: **Create a clan** \n\nClick the button below to start the team creation process. I will dm you and ask you:\n- The ``clan name``  *(must be unique)*\n- The ``clan tag`` *(must be unique)*\n- The ``clan nationality`` *(use flag emojis  :flag_fr:  only)*\n\n:x:  to cancel dm !cancel anytime during the creation process", 
                            components=[[
-                                Button(style=ButtonStyle.blue, label="Create a clan", custom_id="button_create_clan"),
-                                Button(style=ButtonStyle.grey, label="Edit a clan", custom_id="button_edit_clan")
+                                Button(style=ButtonStyle.green, label="Create a clan", custom_id="button_create_clan")
+                                ]])
+    
+    
+    await pannel_chan.send(content=":pencil: **Edit a clan** \n\nClick the button below to edit the clan of your choice:\n- ``Invite`` a player to join your clan. \n:exclamation: **Each invited player needs to be on this discord and must have finalized the registration process** \n\n- ``Remove`` a player from your clan. \n:exclamation: **You can't remove yourself from the clan, contact an admin if you want to delete your clan**\n\n- Mark a player as ``active/inactive``\n\n- Change the clan ``captain``\n:exclamation: **This action is irreversible** \n\n- Edit the ``flag``,  ``discord invitation link``,  ``clan name`` and ``tag`` of your clan", 
+                           components=[[
+                                Button(style=ButtonStyle.blue, label="Edit a clan", custom_id="button_edit_clan")
+                                ]])
+    
+    
+    await pannel_chan.send(content="**Leave a clan**\n\nClick the button below to leave the clan of your choice.\n:exclamation:**You can't leave a clan you are captain of, contact an admin to delete your clan or change clan captain**", 
+                           components=[[
+                                Button(style=ButtonStyle.red, label="Leave a clan", custom_id="button_leave_clan")
                                 ]])
     '''
+    
+    
+    
 
 bot.run(os.getenv('TOKEN'))
 
