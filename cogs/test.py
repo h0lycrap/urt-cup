@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from datetime import datetime
+import cogs.common.check as check
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -9,6 +10,7 @@ class Test(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.guild = bot.guilds[0]
 
     @commands.command()
     async def zmb(self, ctx):
@@ -29,22 +31,30 @@ class Test(commands.Cog):
     async def st0mp(self, ctx):
         await ctx.send(self.bot.quotes['cmdSt0mp'])
 
+    @check.is_guild_manager()
     @commands.command()
     async def holycrap(self, ctx):
-        #await message.channel.send(self.bot.quotes['cmdHoly'])
-        await ctx.send(
-            "Who won the knife fight?",
-            components = [
-                Select(
-                    placeholder = "Select one team",
-                    options = [
-                        SelectOption(label = "NoWay", emoji = u"\U0001F1EB\U0001F1F7", value = "NoWay"),
-                        SelectOption(label = "Quad", emoji = u"\U0001F1EE\U0001F1F9", value = "Quad")
-                    ],
-                    custom_id="select"
-                )
-            ]
-        )
+        # Create category and channels
+        role_flawless = discord.utils.get(self.guild.roles, id=int(self.bot.role_flawless_crew_id))
+        role_moderator = discord.utils.get(self.guild.roles, id=int(self.bot.role_moderator_id))
+        role_bot = discord.utils.get(self.guild.roles, id=int(self.bot.role_bot_id))
+        category = await self.guild.create_category_channel(f"\U0001F947┋ TEST")
+        await category.set_permissions(self.guild.default_role, send_messages=False)
+        await category.set_permissions(role_flawless, send_messages=True)
+        await category.set_permissions(role_moderator, send_messages=True)
+        await category.set_permissions(role_bot, send_messages=True)
+
+        # get admin channel permissions
+        chan_admin = await category.create_text_channel("admin-panel")
+        await chan_admin.set_permissions(role_bot, view_channel=True)
+        await chan_admin.set_permissions(self.guild.default_role, view_channel=False)
+        await chan_admin.set_permissions(role_flawless, view_channel=True)
+        await chan_admin.set_permissions(role_moderator, view_channel=True)
+        
+
+        chan_signups = await category.create_text_channel("signups")
+        chan_calendar = await category.create_text_channel("calendar")
+        chan_stage = await category.create_text_channel("stage")
         
     @commands.command()
     async def urt5(self, ctx):

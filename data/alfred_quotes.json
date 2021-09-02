@@ -10,7 +10,7 @@
 	"cmdUrt5": "soon (tm)",
 
 	"cmdRegister_intro" : "Follow the instructions to register and unlock all the other channels of the **Flawless** server.",
-	"cmdRegister_prompt_auth" : "Enter your urt auth:",
+	"cmdRegister_prompt_auth" : "Enter your urt account name (auth, not game key):",
 	"cmdRegister_error_authalreadyreg" : "Auth already registered.",
 	"cmdRegister_error_invalidauth" : "Invalid auth.",
 	"cmdRegister_error_authdoesntexist" : "This auth does not exist.",
@@ -21,7 +21,7 @@
 	"cmdRegister_success" : "You are successfully registered.",
 	"cmdRegister_log" : "New user registered.",
 
-	"cmdCreateClan_intro" : "Follow the instructions to create your clan, type ``!cancel`` anytime to cancel the clan creation.",
+	"cmdCreateClan_intro" : "Follow the instructions to create your clan \n*Type ``!cancel`` anytime to cancel the clan creation.*",
 	"cmdCreateClan_prompt_name" : "Enter clan name:",
 	"cmdCreateClan_cancel" : "Clan creation canceled.",
 	"cmdCreateClan_error_name" : "Clan name already taken.",
@@ -38,7 +38,7 @@
 	"cmdLeaveClan_success" : "You left the clan ``{clanname}``.",
 	"cmdLeaveClan_log" : "The player ``{playername}`` left the clan ``{teamname}``",
 
-	"cmdEditClan_prompt_tag" : "Enter the tag of the clan you want to edit:",
+	"cmdEditClan_prompt_tag" : "Enter the tag of the clan you want to edit: \n*Type ``!cancel`` to cancel.*",
 	"cmdEditClan_cancel" : "Clan edit canceled.",
 	"cmdEditClan_error_tagnotexist" : "This clan tag does not exist.",
 	"cmdEditClan_error_notcaptain" : "You are not the captain of any clan.",
@@ -62,6 +62,11 @@
 	"cmdEditPlayer_update_auth_success" : "Player auth updated!",
 	"cmdEditPlayer_update_auth_log" : "The player ``{playername}``'s auth was changed from ``{oldauth}`` to ``{newauth}``",
 
+	"cmdEditPlayer_update_flag_prompt_flag" : "Enter the new player flag (use flag emoji only): \n*Type ``!cancel`` to cancel*",
+	"cmdEditPlayer_update_flag_cancel" : "Player edition canceled.",
+	"cmdEditPlayer_update_flag_success" : "Player flag updated.",
+	"cmdEditPlayer_update_flag_log" : "The player ``{playername}``'s flag was changed from {oldflag} to {newflag}",
+
 	"cmdEditPlayer_cancel" : "Player edition canceled.",
 
 	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",
@@ -69,6 +74,7 @@
 	"cmdAddPlayer_cancel" : "Player invitation canceled.",
 	"cmdAddPlayer_error_auth" : "The auth ``{auth}`` is not registered yet, invite the player to join the discord server and register using this link: <https://discord.gg/DBJjn3erzz>.",
 	"cmdAddPlayer_error_alreadyinvited" : "The player ``{name}`` was already invited to that clan.",
+	"cmdAddPlayer_error_leftdiscord" : "The player ``{name}``is not on the discord server anymore, invite him back using this link: <https://discord.gg/DBJjn3erzz>.",
 	"cmdAddPlayer_invite" : "``{captain}`` invited you to join his clan ``{teamname}``.",
 	"cmdAddPlayer_invite_log" : "``{name}`` was invited to join the clan ``{teamname}``",
 	"cmdAddPlayer_invitesent" : "Invitation sent to ``{name}``.",
@@ -121,6 +127,7 @@
 	"cmdChangeCaptain_cancel" : "Clan captain change canceled.",
 	"cmdChangeCaptain_error_alreadycap" : "You are already the captain of this clan.",
 	"cmdChangeCaptain_error_notinclan" : "The player ``{name}`` is not a member of this clan.",
+	"cmdChangeCaptain_error_leftdiscord" : "The player ``{name}`` is no longer on this discord server, invite him back using this link: <https://discord.gg/DBJjn3erzz>",
 	"cmdChangeCaptain_success" : "The player ``{name}`` is now the captain of this clan.",
 	"cmdChangeCaptain_success_dm" : "You are now the captain of the clan ``{teamname}``.",
 	"cmdChangeCaptain_log" : "The clan ``{teamname}`` changed captains. Before: ``{oldcaptain}`` After: ``{newcaptain}``",
@@ -138,15 +145,17 @@
 	"cmdDeletePlayerAdmin_prompt_success" : "Player deleted.",
 	"cmdDeletePlayerAdmin_prompt_log" : "The player ``{playername}`` has been deleted from the database and kicked.",
 
-	"cmdCreateCup_prompt_name" : "Enter the name of the cup:",
+	"cmdCreateCup_prompt_name" : "Enter the name of the cup: \n*Type ``!cancel`` to cancel*",
 	"cmdCreateCup_error_perm" : "You need to be an administrator to create a cup",
 	"cmdCreateCup_prompt_nbofteams" : "Enter the number of teams allowed to signup:",
-	"cmdCreateCup_prompt_miniroster" : "Enter the minimum number of players per roster:",
+	"cmdCreateCup_prompt_miniroster" : "Enter the **minimum** number of players per roster: \n*Type ``!cancel`` to cancel*",
+	"cmdCreateCup_prompt_maxiroster" : "Enter the **maximum** number of players per roster: \n*Type ``!cancel`` to cancel*",
+	"cmdCreateCup_error_maxiroster" : "The number of maximum players in roster has to be bigger or equal to the minimum number of players.",
 	"cmdCreateCup_error_nbofteams" : "Please enter a number.",
 	"cmdCreateCup_error_date" : "Invalid date format.",
 	"cmdCreateCup_error_startdate" : "You can't specify an end date prior to the start date.",
-	"cmdCreateCup_prompt_signupstart" : "Enter signup start date (``DD/MM/YYYY``):",
-	"cmdCreateCup_prompt_signupend" : "Enter signup end date (``DD/MM/YYYY``):",
+	"cmdCreateCup_prompt_signupstart" : "Enter signup start date (``DD/MM/YYYY``): \n*Type ``!cancel`` to cancel*",
+	"cmdCreateCup_prompt_signupend" : "Enter signup end date (``DD/MM/YYYY``): \n*Type ``!cancel`` to cancel*",
 	"cmdCreateCup_prompt_cancel" : "Cup creation canceled.",
 	"cmdCreateCup_success" : "Cup successfully created.",
 
@@ -157,16 +166,61 @@
 	"cmdSignup_alreadysignedup" : "Your team is already signed up for this cup.",
 	"cmdSignup_intro" : "Here is the list of cups currently open for signup:",
 	"cmdSignup_prompt_choice" : "Enter the cup index you want to signup to:",
-	"cmdSignup_error_miniroster" : "There are not enough players in this team. You need to have minimum {mini_roster} players to signup.",
+	"cmdSignup_error_miniroster" : "There are not enough players in this team. You need to have minimum ``{mini_roster}`` active players to signup.",
+	"cmdSignup_error_maxiroster" : "There are too many active players in this team. You need to have maximum ``{maxi_roster}`` active players to signup.",
 	"cmdSignup_error_choice" : "Invalid choice, type the cup index (example: ``1`` if there is only 1 cup):",
 	"cmdSignup_cancel" : "Team sign up canceled",
 	"cmdSignup_prompt_tag" : "Enter the tag of the team you want to signup to the cup ``{cupname}``:",
 	"cmdSignup_error_tagnotexist" : "This clan tag does not exist.",
 	"cmdSignup_error_notcaptain" : "You are not the captain of that clan.",
-	"cmdSignup_success" : "You successfully signed up your clan {teamname} to the cup ``{cupname}``.",
+	"cmdSignup_success" : "You successfully signed up your clan ``{teamname}`` to the cup ``{cupname}``.",
 	"cmdSignup_confirmation" : "Are you sure you want to sign up your clan ``{teamname}`` to the cup ``{cupname}``?",
-	"cmdSignup_log" : "The clan {teamname} signed up to the cup ``{cupname}``.",
+	"cmdSignup_log" : "The clan ``{teamname}`` signed up to the cup ``{cupname}``.",
 	"cmdSignup_error_overlap" : "You can't signup this team, the player(s): ``{overlap}`` is(are) already set as active players of another team registered for this cup.",
+
+	"cmdAddTeamDiv_confirmation" : "Are you sure you want to add the team ``{teamname}`` to the ``division {div_number}``?",
+	"cmdAddTeamDiv_cancel" : "Division edition canceled",
+	"cmdAddTeamDiv_success" : "The team ``{teamname}`` was added to the ``division {div_number}``.",
+	"cmdAddTeamDiv_log" : "The team ``{teamname}`` was added to the ``division {div_number}`` for the cup ``{cupname}``.",
+
+	"cmdRemoveTeamDiv_confirmation" : "Are you sure you want to remove the team ``{teamname}`` from the ``division {div_number}``?",
+	"cmdRemoveTeamDiv_success" : "The team ``{teamname}`` was removed from the ``division {div_number}``.",
+	"cmdRemoveTeamDiv_log" : "The team ``{teamname}`` was removed from the ``division {div_number}`` for the cup ``{cupname}``.",
+
+	"cmdEditCup_cancel" : "Edit cup canceled.",
+	"cmdEditCupRename_success" : "Cup renamed.",
+	"cmdEditCupRename_log" : "The cup ``{oldname}`` was renamed ``{newname}``.",
+
+	"cmdEditCupMiniRoster_log" : "The roster requirements changed from ``{oldminiroster}`` to ``{newminiroster}`` for the cup ``{cupname}``.",
+
+	"cmdEditCupSignupDates_log" : "The signup dates changed from ``{oldsignupdates}`` to ``{newsignupdates}`` for the cup ``{cupname}``.",
+
+	"cmdDeleteCup_confirmation" : "Are you sure you want to delete the cup ``{cupname}``? \n :exclamation: :exclamation: :exclamation: **This action is irreversible and will permanently delete all the data of the cup**",
+	"cmdDeleteCup_cancel" : "Cup deletion canceled",
+	"cmdDeleteCup_log" : ":exclamation: The cup ``{cupname}`` has been permanently deleted.",
+
+	"cmdDeleteDiv_confirmation" : "Are you sure you want to delete the ``division {div_number}``?",
+	"cmdDeleteDiv_success" : "The ``division {div_number}`` was deleted.",
+	"cmdDeleteDiv_log" : "The ``division {div_number}``  was deleted for the cup ``{cupname}``.",
+
+	"cmdDeleteFixture_confirmation" : "Are you sure you want to delete this fixture? \n :exclamation: :exclamation: :exclamation: **This action is irreversible and will permanently delete all the data of the fixture**",
+
+	"cmdEditFixture_cancel" : "Fixture edit cancel",
+
+	"cmdForceSignup_error_NoCup" : "You need to do this command in the admin channel of a cup.",
+	"cmdForceSignup_error_NoTeam" : "Error, invalid tag.",
+	"cmdForceSignup_error_AlreadySignedUp" : "Error, team already signed up.",
+	"cmdForceSignup_success" : "Clan signed up!",
+
+	"cmdCreateFixtures_confirmation" : "Are you sure you want to create {number_of_fixtures} fixtures for the division {div_number}?",
+	"cmdCreateFixtures_cancel" : "Fixture creation canceled.",
+
+
+	"cmdForceRemoveSignup_confirmation" : "Are you sure you want to remove this team from the signups? \n :exclamation: :exclamation: :exclamation: **This action is irreversible and will permanently delete all the data of the team in this cup**",
+	"cmdForceRemoveSignup_cancel" : "Action canceled.",
+	"cmdForceRemoveSignup_error_AlreadySignedUp" : "Error, team not signed up.",
+	"cmdForceRemoveSignup_success" : "Clan removed from signups!",
+	"cmdForceRemoveSignup_log" : "The clan ``{teamname}`` was removed from the signups of the cup ``{cupname}``.",
 
 	"cmdSchedule_error_args" : "Please use the command as following: ``!schedule <date> <time (CET)>``",
 	"cmdSchedule_error_date" : "Invalid date format. Please use ``DD/MM/YYYY``",

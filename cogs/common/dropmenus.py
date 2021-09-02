@@ -9,6 +9,13 @@ def teams(clan_info_list, title, id):
 
     return [Select( placeholder = title, options = select_options, custom_id=id)]
 
+def formats(formats, title, id): 
+    select_options = []
+    for (i, format) in enumerate(formats):
+        select_options.append(SelectOption(label = format, value = i))
+
+    return [Select( placeholder = title, options = select_options, custom_id=id)]
+
 def players_of_team(bot, team_id, id, include_captain=False, include_invited=False, include_members=True, include_inactive=False): 
     # Get the players for each team
     bot.cursor.execute("SELECT * FROM Roster WHERE team_id = %s;", (team_id,))

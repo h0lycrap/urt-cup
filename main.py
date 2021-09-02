@@ -60,6 +60,8 @@ bot.role_unregistered_id = 836897738796826645
 bot.role_captains_id = 839893529517228113
 bot.role_flawless_crew_id = 839651903298207816
 bot.role_cup_supervisor_id = 836901156642226196
+bot.role_moderator_id = 836901156642226196
+bot.role_bot_id = 836873834803494933
 
 bot.channel_log_id = 834947952023437403
 bot.channel_roster_id = 834931256918802512
@@ -80,6 +82,17 @@ async def on_member_join(member):
         return
 
     await member.add_roles(discord.utils.get(bot.guilds[0].roles, id=bot.role_unregistered_id))
+
+@bot.event
+async def on_member_remove(member):
+    #Get user info
+    bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s", (member.id,)) 
+    user_info = bot.cursor.fetchone()
+    log_channel =  discord.utils.get(bot.guilds[0].channels, id=bot.channel_log_id)
+    if user_info:
+        await log_channel.send(f":exclamation: {user_info['ingame_name']} [``{user_info['urt_auth']}``] left the discord")
+    else:
+        await log_channel.send(f":exclamation: **{member} (not registered) left the discord**")
 
 
 

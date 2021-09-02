@@ -4,6 +4,7 @@ import cogs.common.utils as utils
 import cogs.common.embeds as embeds
 import cogs.common.check as check
 import cogs.common.update as update
+import flag
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -56,12 +57,68 @@ class Account(commands.Cog):
                 await self.update_player_name(player_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_player_changeauth"):
                 await self.update_player_auth(player_to_edit, user, interaction)
+            elif interaction.component.id.startswith("button_edit_player_changeflag"):
+                await self.update_player_flag(player_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_player_delete"):
                 await self.delete_player(player_to_edit, user, interaction)
 
             # Update the roster
             self.bot.async_loop.create_task(update.roster(self.bot))
-        
+
+    
+    @commands.command() 
+    @check.is_guild_manager()
+    async def forceregister(self, ctx, discord_id, auth, name, flag):   
+        # Check discord id
+        user = discord.utils.get(self.guild.members, id=int(discord_id))
+        if not user:
+            await ctx.send("Discord id not on server")
+            return
+
+        # Check if auth is already registered
+        self.bot.cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth,))   
+        if self.bot.cursor.fetchone():
+            await ctx.send(self.bot.quotes['cmdRegister_error_authalreadyreg'])
+            return
+
+        if not utils.check_auth(auth):
+            await ctx.send(self.bot.quotes['cmdRegister_error_authdoesntexist'])
+            return
+
+        # Check if ingame name is already taken
+        self.bot.cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (name,))   
+        if self.bot.cursor.fetchone():
+            await ctx.send(self.bot.quotes['cmdRegister_error_nametaken'])
+            return
+
+        country, country_checked = utils.check_flag_emoji(self.bot.cursor, flag)
+
+        if not country_checked:
+            await ctx.send(self.bot.quotes['cmdRegister_error_country'])
+            return
+
+        # Add user to DB and remove unregistered role
+        self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
+        self.bot.conn.commit()
+        await ctx.send(self.bot.quotes['cmdRegister_success'])
+        await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
+
+        # Remove busy status
+        try:
+            self.bot.users_busy.remove(user.id)
+        except:
+            pass
+
+        # Print on the log channel
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        embed = embeds.player(self.bot, auth)
+        await log_channel.send(content=self.bot.quotes['cmdRegister_log'], embed=embed)
+
+        # There can be permission errors if the user's role is higher in hierarchy than the bot
+        try:
+            await user.edit(nick=name)
+        except Exception as e:
+            pass
 
     
     async def register(self, user):
@@ -165,7 +222,8 @@ class Account(commands.Cog):
         # Get the action to perform
         await ctx.send(embed = player_embed, components=[[
                                 Button(style=ButtonStyle.grey, label="Change player name", custom_id=f"button_edit_player_changename_admin_{player_to_edit['id']}"),
-                                Button(style=ButtonStyle.grey, label="Change auth", custom_id=f"button_edit_player_changeauth_admin_{player_to_edit['id']}")
+                                Button(style=ButtonStyle.grey, label="Change auth", custom_id=f"button_edit_player_changeauth_admin_{player_to_edit['id']}"),
+                                Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(player_to_edit['country']), custom_id=f"button_edit_player_changeflag_admin_{player_to_edit['id']}")
                             ],
                             [
                                 Button(style=ButtonStyle.red, label="Delete player", custom_id=f"button_edit_player_deleteplayer_admin_{player_to_edit['id']}")
@@ -274,6 +332,47 @@ class Account(commands.Cog):
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(self.bot.quotes['cmdEditPlayer_update_auth_log'].format(playername=player_toedit['ingame_name'], oldauth=player_toedit['urt_auth'], newauth=auth))
 
+    async def update_player_flag(self, player_toedit, user, interaction):
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Check your dms!")
+
+        # Flag the user as busy
+        self.bot.users_busy.append(user.id)
+
+        def check(m):
+                return m.author == user and m.guild == None
+
+        # Wait for team flag and check if this is a flag emoji 
+        oldflag = flag.flagize(player_toedit['country'])
+        country_checked = False
+        while not country_checked:
+            await user.send(self.bot.quotes['cmdEditPlayer_update_flag_prompt_flag'])
+            country_msg = await self.bot.wait_for('message', check=check)
+            country = country_msg.content.strip()
+            serialized_country = flag.dflagize(country)
+
+            # Cancel
+            if country.lower() == '!cancel':
+                await user.send(self.bot.quotes['cmdEditPlayer_update_flag_cancel'])
+                return
+
+            self.bot.cursor.execute("SELECT id FROM Countries WHERE id = %s;", (serialized_country,))
+            if not self.bot.cursor.fetchone():
+                await user.send(self.bot.quotes['cmdRegister_error_country'])
+            else:
+                country_checked = True
+
+                # Remove busy status
+                self.bot.users_busy.remove(user.id)
+
+        self.bot.cursor.execute("UPDATE Users SET country=%s WHERE id=%s", (serialized_country, player_toedit['id']))
+        self.bot.conn.commit()
+
+        await user.send(self.bot.quotes['cmdEditPlayer_update_flag_success'])
+
+        # Print on the log channel
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdEditPlayer_update_flag_log'].format(playername=player_toedit['ingame_name'], oldflag=oldflag, newflag=country))
+
     async def delete_player(self, player_toedit, user, interaction):
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeletePlayerAdmin_intro'].format(playername=player_toedit['ingame_name']), components=[[
                                     Button(style=ButtonStyle.green, label="Yes", custom_id="button_deleteplayer_admin_yes"),
@@ -345,6 +444,10 @@ class Account(commands.Cog):
             # There can be permission errors if the user's role is higher in hierarchy than the bot
             try:
                 user_to_kick = discord.utils.get(self.guild.members, id=int(player_toedit['discord_id']))
+                # remove its roles
+                for role in user_to_kick.roles:
+                    user_to_kick.remove_roles(role)
+
                 await user_to_kick.kick()
             except Exception as e:
                 print(e)

@@ -47,7 +47,7 @@ def check_time_format(time_input):
         return False, None
 
 def prevent_discord_formating(input_text):
-    return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_')
+    return input_text.replace('`', '\\`').replace('*', '\\*').replace('_', '\\_').replace('|', '\\|')
 
 # Check if there are any emojis in the message (custom or not)
 def emojis_in(text):

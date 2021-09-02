@@ -23,6 +23,7 @@ class ServerLoop(commands.Cog):
         # Do dummy select to wake up the database
         self.bot.async_loop.create_task(update.roster(self.bot))
         self.bot.async_loop.create_task(update.signups(self.bot))
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
         print("Loop!")
 
 

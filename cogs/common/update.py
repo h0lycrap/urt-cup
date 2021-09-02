@@ -58,24 +58,23 @@ async def roster(bot):
 
 
 async def signups(bot):
-    # Get channel (TODO:REFACTOR to account for new channels for different cups)
-    signup_channel = discord.utils.get(bot.guilds[0].channels, id=836895695269134386)
 
     # Get all cups
     bot.cursor.execute("SELECT * FROM Cups;")
     for cup_info in bot.cursor.fetchall():
+        # Get signups channel
+        signup_channel = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_signups_id']))
 
         # Generate the embed
-        embed = embeds.signup(bot, cup_info['id'])
+        embed = await embeds.signup(bot, cup_info['id'])
 
         signup_start_date = datetime.strptime(cup_info['signup_start_date'], '%Y-%m-%d %H:%M:%S')
         signup_end_date = datetime.strptime(cup_info['signup_end_date'], '%Y-%m-%d %H:%M:%S')
 
-        # Check if the signup are open or if cup is full
+        # Check if the signup are open 
         bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d", (cup_info['id'],))
-        teams_signedup = bot.cursor.fetchall()
 
-        if not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)) or len(teams_signedup) >= cup_info['number_of_teams']:
+        if not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)):
             signup_button = [Button(style=ButtonStyle.grey, disabled=True, label="Signup closed", custom_id=f"button_signup_{cup_info['id']}")]
         else:
             signup_button = [Button(style=ButtonStyle.green, label="Signup", custom_id=f"button_signup_{cup_info['id']}")]
@@ -90,3 +89,46 @@ async def signups(bot):
             new_signup_msg = await signup_channel.send(embed=embed, components=signup_button)
             bot.cursor.execute("UPDATE Cups SET signup_message_id=%s WHERE id=%s", (str(new_signup_msg.id), cup_info['id']))
             bot.conn.commit()
+
+        # Check if there are divs
+        bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s", (cup_info['id'],))
+        divisions = bot.cursor.fetchall()
+
+        if divisions:
+            for division in divisions:
+                # Get division embed
+                division_embed = await embeds.division(bot, cup_info['id'], division['div_number'])
+
+                # Check if there is a message id stored
+                try:
+                    division_message = await signup_channel.fetch_message(division['embed_id'])
+                    await division_message.edit(embed=division_embed)
+
+                except:
+                    # Send new message and store message id
+                    new_division_msg = await signup_channel.send(embed=division_embed)
+                    bot.cursor.execute("UPDATE Divisions SET embed_id=%s WHERE id=%s", (str(new_division_msg.id), division['id']))
+                    bot.conn.commit()
+
+
+async def fixtures(bot):
+    # Get all cups
+    bot.cursor.execute("SELECT * FROM Cups;")
+    for cup_info in bot.cursor.fetchall():
+        # Update match_index
+        match_index_chan = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_match_index_id']))
+        await match_index_chan.purge(limit=10000)
+        await embeds.match_index(bot, cup_info['id'], match_index_chan)
+        # Check if there is a message id stored
+        '''
+        try:
+            match_index_message = await match_index_chan.fetch_message(cup_info['match_index_embed_id'])
+            await match_index_message.edit(embed=match_index_embed)
+        except:
+            # Send new message and store message id
+            new_match_index_msg = await match_index_chan.send(embed=match_index_embed)
+            bot.cursor.execute("UPDATE Cus SET match_index_embed_id=%s WHERE id=%s", (str(new_match_index_msg.id), cup_info['id']))
+            bot.conn.commit()
+        '''
+
+

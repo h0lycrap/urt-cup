@@ -30,15 +30,15 @@ def player(bot, auth):
 
             # If he is a member of the team
             if int(team['accepted']) == 1:
-                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']}\n"
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {utils.prevent_discord_formating(team_info['tag'])}\n"
 
             # If he is the captain of the team
             elif int(team['accepted']) == 2:
-                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']} (Captain)\n"
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {utils.prevent_discord_formating(team_info['tag'])} (Captain)\n"
 
             # If he is inactive
             elif int(team['accepted']) == 3:
-                teams_str += f"{flag.flagize(team_info['country'])} \u200b {team_info['tag']} (Inactive)\n" 
+                teams_str += f"{flag.flagize(team_info['country'])} \u200b {utils.prevent_discord_formating(team_info['tag'])} (Inactive)\n" 
 
     embed.add_field(name="Clans", value= teams_str, inline=True)
 
@@ -110,7 +110,7 @@ def team(bot, tag, show_invited=False):
 
         player_string = f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
         # Check if we add in the first column or the second one
-        if i <= 3 or len(members) < mini_number_players:
+        if i % 2 == 0:
             roster_str1 += player_string
         else:
             roster_str2 += player_string
@@ -130,8 +130,8 @@ def team(bot, tag, show_invited=False):
         roster_invited += f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
 
     # Create embed
-    embed=discord.Embed(title=f"{name} {country}", color=13695009)
-    embed.add_field(name=f"**Captain: **{captain['ingame_name']}     |     **Tag: **{tag}", value= "\u200b", inline=False)
+    embed=discord.Embed(title=f"{utils.prevent_discord_formating(name)} {country}", color=13695009)
+    embed.add_field(name=f"**Captain: **{captain['ingame_name']}     |     **Tag: **{utils.prevent_discord_formating(tag)}", value= "\u200b", inline=False)
     embed.add_field(name="Members [auth] ", value= roster_str1, inline=True)
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
     if show_invited and roster_invited != "":
@@ -166,7 +166,7 @@ async def team_index(bot):
         except:
             continue
 
-        team_string = f"{team_flag} [{team_tag}]({roster_message.jump_url})\n"
+        team_string = f"{team_flag} [{utils.prevent_discord_formating(team_tag)}]({roster_message.jump_url})\n"
 
         # Add to left or right column
         if i % 2 == 0:
@@ -179,10 +179,15 @@ async def team_index(bot):
     if len(index_str_left) == 0:
         index_str_left = "\u200b"
 
+    # Get total number of players in teams
+    bot.cursor.execute("SELECT * FROM Roster")
+    total_players = bot.cursor.fetchall()
+
     # Create the embed
     embed = discord.Embed(title=f":pencil: Clan index", color=0xFFD700, description="Click on a clan tag to jump to their roster")
     embed.add_field(name="Teams", value= index_str_left, inline=True)
     embed.add_field(name="\u200b", value= index_str_right, inline=True)
+    embed.set_footer(text=f"Total: {len(sorted_teams)} Teams, {len(total_players)} Players")
 
     return embed
 
@@ -222,12 +227,11 @@ async def team_list(bot, clan_info_list, title, message): # TODO refactor this i
 
     return clan_choice
 
-def signup(bot, cup_id):
+async def signup(bot, cup_id):
     # Get cup info
     bot.cursor.execute("SELECT * FROM Cups WHERE id=%d", (cup_id,))
     cup_info = bot.cursor.fetchone()
     cup_name = cup_info['name']
-    max_number_of_teams = cup_info['number_of_teams']
     signup_start_date = datetime.datetime.strptime(cup_info['signup_start_date'], '%Y-%m-%d %H:%M:%S')
     signup_end_date = datetime.datetime.strptime(cup_info['signup_end_date'], '%Y-%m-%d %H:%M:%S')
 
@@ -238,38 +242,95 @@ def signup(bot, cup_id):
     team_string = ""
     tag_string = ""
 
+    roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
+
     #Create embed field content
     if team_ids:
         for i, team_id in enumerate(team_ids):
             # Get team info
             bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_id['team_id'],))
             team_info = bot.cursor.fetchone()
-            team_name = team_info['name']
+            team_name = utils.prevent_discord_formating(team_info['name'])
             team_flag = flag.flagize(team_info['country'])
             team_tag_str = utils.prevent_discord_formating(team_info['tag'])
             index_str = str(i + 1) + "."
 
-            team_string += f"``{index_str.ljust(3)}`` {team_flag} {team_name}\n"
+            # Get roster link
+            roster_message = await roster_channel.fetch_message(team_info['roster_message_id'])
+            roster_link = roster_message.jump_url
+
+            team_string += f"{team_flag} {team_name}\n"
             tag_string += f"{team_tag_str}\n"
 
-        spots_available = max_number_of_teams - len(team_ids)
+            
+
+        
     else:
-        spots_available = max_number_of_teams 
+        team_string = "No team signed up yet" 
+        tag_string = "\u200b"
 
     # Fill empty spots
-    for i in range(spots_available):
-        index_str = str(i + len(team_ids) + 1) + "."
-        team_string += f"``{index_str.ljust(3)}`` \u200b \u200b\u200b \u200b\u200b \u200b \u200b \u200b \u200b \u200b\n"
-        tag_string += "\u200b \n"
+    #for i in range(spots_available):
+    #    index_str = str(i + len(team_ids) + 1) + "."
+    #    team_string += f"``{index_str.ljust(3)}`` \u200b \u200b\u200b \u200b\u200b \u200b \u200b \u200b \u200b \u200b\n"
+    #    tag_string += "\u200b \n"
 
     # Signup dates
     signup_string = f"__{signup_start_date.strftime('%a')} {signup_start_date.strftime('%b')} {signup_start_date.day} {signup_start_date.year}__ to __{signup_end_date.strftime('%a')} {signup_end_date.strftime('%b')} {signup_end_date.day} {signup_end_date.year}__"
 
     # Create the embed
-    embed = discord.Embed(title=f":trophy: {cup_name}", color=0xFFD700, description="Open cup")
+    embed = discord.Embed(title=f":trophy: {cup_name}", color=0xFFD700, description=f"Mandatory number of **active** players in roster: between ``{cup_info['mini_roster']}`` and ``{cup_info['maxi_roster']}``")
     embed.add_field(name="Team", value= team_string, inline=True)
     embed.add_field(name="Tag", value= tag_string, inline=True)
+    embed.add_field(name="Total", value= f"``{len(team_ids)}`` Teams signed up", inline=False)
     embed.add_field(name="Signup dates", value= signup_string, inline=False)
+
+    return embed
+
+async def division(bot, cup_id, div_number):
+    # Get cup info
+    bot.cursor.execute("SELECT * FROM Cups WHERE id=%d", (cup_id,))
+
+    # Fetch signed up teams
+    bot.cursor.execute("SELECT team_id FROM Signups WHERE cup_id=%d AND div_number=%s", (cup_id, div_number))
+    team_ids = bot.cursor.fetchall()
+
+    tag_string = ""
+    score_string = ""
+    wdl_string = ""
+
+    roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
+
+    #Create embed field content
+    if team_ids:
+        for i, team_id in enumerate(team_ids):
+            # Get team info
+            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_id['team_id'],))
+            team_info = bot.cursor.fetchone()
+            team_name = utils.prevent_discord_formating(team_info['name'])
+            team_flag = flag.flagize(team_info['country'])
+            team_tag_str = utils.prevent_discord_formating(team_info['tag'])
+            index_str = str(i + 1) + "."
+
+            # Get roster link
+            roster_message = await roster_channel.fetch_message(team_info['roster_message_id'])
+            roster_link = roster_message.jump_url
+
+            tag_string += f"``{index_str.ljust(3)}`` {team_flag} {team_tag_str}\n" #[{team_tag_str}]({roster_link})\n"
+            score_string += "``0``\n"
+            wdl_string += "``8/5/2``\n"
+        
+    else:
+        score_string = "\u200b"
+        wdl_string = "\u200b"
+        tag_string = "No team in div"
+
+
+    # Create the embed
+    embed = discord.Embed(title=f"Division {div_number}", color=0xFFD700)
+    embed.add_field(name="Team", value= tag_string, inline=True)
+    embed.add_field(name="W/D/L", value= wdl_string, inline=True)
+    embed.add_field(name="Points", value= score_string, inline=True)
 
     return embed
 
@@ -306,28 +367,24 @@ async def map_list(bot, map_list, title, message):
     return map_choice
 
 
-def fixture(bot, fixture_id):
-
-    # Get Fixture info
-    bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%d", (fixture_id,))
-    fixture = bot.cursor.fetchone()
+def fixture(bot, team1_id, team2_id, date, format):
 
     # Get teams info
-    bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s", (fixture['team1'],))
+    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team1_id,))
     team1 = bot.cursor.fetchone()
-    bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s", (fixture['team2'],))
+    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team2_id,))
     team2 = bot.cursor.fetchone()
 
     # Get date and time if set yet
-    if fixture['date']:
-        fixture_date_elems = fixture['date'].split(" ")
+    if date:
+        fixture_date_elems = date.split(" ")
         fixture_date = fixture_date_elems[0]
         fixture_time = fixture_date_elems[1]
     else:
         fixture_date = "-"
         fixture_time = "-"
 
-    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description= fixture['format'])
+    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= format)
     embed.add_field(name=":pencil: Status", value= "-", inline=True)
     embed.add_field(name=":calendar_spiral: Date", value= fixture_date, inline=True)
     embed.add_field(name=":alarm_clock: Time (CET)", value= fixture_time, inline=True)
@@ -336,3 +393,88 @@ def fixture(bot, fixture_id):
     embed.add_field(name=":link: Demo and MOSS", value= f"https://dev.urt.li", inline=True)
 
     return embed
+
+async def match_index(bot, cup_id, channel):
+    # Get fixtures 
+    bot.cursor.execute("SELECT * FROM Fixtures WHERE cup_id=%d", (cup_id,))
+    fixtures = bot.cursor.fetchall()
+
+    #Create embed field content
+    fixture_string = "Matches not scheduled \n\n"
+    if fixtures:
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\nMatches scheduled but not played \n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\nMatches in progress \n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\nMatches finished \n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+    '''   
+    else:
+        fixture_string = "\u200b"
+
+    print(len(fixture_string))
+    # Create the embed
+    embed = discord.Embed(title=f":dividers: Match index", color=0xFFD700, description=f"Click on a game to jump to their channel")
+    embed.add_field(name="Matches not scheduled", value= fixture_string, inline=False)
+    embed.add_field(name="Matches scheduled but not played", value= fixture_string, inline=True)
+    embed.add_field(name="Matches in progress", value= fixture_string, inline=False)
+    embed.add_field(name="Matches finsihed", value= fixture_string, inline=False)
+
+    return embed
+    '''
