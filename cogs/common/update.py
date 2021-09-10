@@ -120,15 +120,25 @@ async def fixtures(bot):
         await match_index_chan.purge(limit=10000)
         await embeds.match_index(bot, cup_info['id'], match_index_chan)
         # Check if there is a message id stored
-        '''
-        try:
-            match_index_message = await match_index_chan.fetch_message(cup_info['match_index_embed_id'])
-            await match_index_message.edit(embed=match_index_embed)
-        except:
-            # Send new message and store message id
-            new_match_index_msg = await match_index_chan.send(embed=match_index_embed)
-            bot.cursor.execute("UPDATE Cus SET match_index_embed_id=%s WHERE id=%s", (str(new_match_index_msg.id), cup_info['id']))
-            bot.conn.commit()
-        '''
 
+        # Get calendar channel
+        calendar_chan = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_calendar_id']))
 
+        # Get calendar embed
+        calendar_chan_messages = await calendar_chan.history(limit=5).flatten()
+        calendar_message = None
+        for message in calendar_chan_messages:
+            if not message.embeds:
+                continue
+            if message.embeds[0].title.startswith(":calendar_spiral: Calendar"):
+                calendar_message = message
+                break
+
+        #Update calendar
+        calendar_embed = embeds.calendar(bot, cup_info)
+        if calendar_message:
+            await calendar_message.edit(embed=calendar_embed)
+        else:
+            await calendar_chan.send(embed=calendar_embed)
+
+        

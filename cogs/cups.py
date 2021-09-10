@@ -5,8 +5,6 @@ import cogs.common.embeds as embeds
 import cogs.common.update as update
 import cogs.common.check as check
 import cogs.common.dropmenus as dropmenus
-import datetime
-import numpy as np 
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
@@ -46,7 +44,8 @@ class Cups(commands.Cog):
         elif interaction.component.id.startswith("button_edit_signupdates"):
             await self.change_cup_signup_dates(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_delete_cup"):
-            await self.delete_cup(cup_info, user, user_info, is_admin, interaction)
+            pass
+            #await self.delete_cup(cup_info, user, user_info, is_admin, interaction) Removed temporarilly to avoid big oopsies
         elif interaction.component.id.startswith("button_create_division"):
             await self.create_division(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_add_team_div"):

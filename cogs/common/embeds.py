@@ -40,6 +40,9 @@ def player(bot, auth):
             elif int(team['accepted']) == 3:
                 teams_str += f"{flag.flagize(team_info['country'])} \u200b {utils.prevent_discord_formating(team_info['tag'])} (Inactive)\n" 
 
+        if teams_str == "":
+            teams_str = "."
+
     embed.add_field(name="Clans", value= teams_str, inline=True)
 
     return embed
@@ -86,7 +89,7 @@ def team(bot, tag, show_invited=False):
 
         bot.cursor.execute("SELECT * FROM Users Where id=%s", (inactives[-1]['player_id'],))
         inactive_info = bot.cursor.fetchone()
-        inactive_string += f"{flag.flagize(inactive_info['country'])} {inactive_info['ingame_name']}"
+        inactive_string += f"{flag.flagize(inactive_info['country'])} {utils.prevent_discord_formating(inactive_info['ingame_name'])}"
 
 
     # Get the list of invited players
@@ -108,7 +111,7 @@ def team(bot, tag, show_invited=False):
             player_auth_str = player_info['urt_auth']
             player_flag_str = player_info['country']
 
-        player_string = f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
+        player_string = f"{flag.flagize(player_flag_str)} {utils.prevent_discord_formating(player_info['ingame_name'])} ``[{player_auth_str}]``\n"
         # Check if we add in the first column or the second one
         if i % 2 == 0:
             roster_str1 += player_string
@@ -127,11 +130,11 @@ def team(bot, tag, show_invited=False):
             player_auth_str = player_info['urt_auth']
             player_flag_str = player_info['country']
 
-        roster_invited += f"{flag.flagize(player_flag_str)} {player_info['ingame_name']} ``[{player_auth_str}]``\n"
+        roster_invited += f"{flag.flagize(player_flag_str)} {utils.prevent_discord_formating(player_info['ingame_name'])} ``[{player_auth_str}]``\n"
 
     # Create embed
     embed=discord.Embed(title=f"{utils.prevent_discord_formating(name)} {country}", color=13695009)
-    embed.add_field(name=f"**Captain: **{captain['ingame_name']}     |     **Tag: **{utils.prevent_discord_formating(tag)}", value= "\u200b", inline=False)
+    embed.add_field(name=f"**Captain: **{utils.prevent_discord_formating(captain['ingame_name'])}     |     **Tag: **{utils.prevent_discord_formating(tag)}", value= "\u200b", inline=False)
     embed.add_field(name="Members [auth] ", value= roster_str1, inline=True)
     embed.add_field(name="\u200b", value=roster_str2, inline=True)
     if show_invited and roster_invited != "":
@@ -152,6 +155,7 @@ async def team_index(bot):
     # Sort the teams alphabetically on letters only
     sorted_teams = sorted(teams, key = lambda x: re.sub('[^A-Za-z]+', '', x['tag']).lower())
 
+    modules = []
     index_str_left = ""
     index_str_right = ""
 
@@ -174,10 +178,21 @@ async def team_index(bot):
         else:
             index_str_right += team_string
 
-    if len(index_str_right) == 0:
+        # Create a new module if the limit is reached
+        if len(index_str_left) > 900 and len(index_str_right) > 900:
+            modules.append([index_str_left, index_str_right])
+            index_str_left = ""
+            index_str_right = ""
+
+
+    if len(index_str_right) == 0 and len(modules) == 0:
         index_str_right = "\u200b"
-    if len(index_str_left) == 0:
+        
+    if len(index_str_left) == 0 and len(modules) == 0:
         index_str_left = "\u200b"
+
+    if len(index_str_left) > 0 and len(modules) > 0:
+        modules.append([index_str_left, index_str_right])
 
     # Get total number of players in teams
     bot.cursor.execute("SELECT * FROM Roster")
@@ -185,8 +200,25 @@ async def team_index(bot):
 
     # Create the embed
     embed = discord.Embed(title=f":pencil: Clan index", color=0xFFD700, description="Click on a clan tag to jump to their roster")
-    embed.add_field(name="Teams", value= index_str_left, inline=True)
-    embed.add_field(name="\u200b", value= index_str_right, inline=True)
+    if len(modules) == 0:
+        embed.add_field(name="Teams", value= index_str_left, inline=True)
+        embed.add_field(name="\u200b", value= index_str_right, inline=True)
+    else:
+        for (i, module) in enumerate(modules):
+            if i == 0:
+                lefttitle = "Teams"
+            else:
+                lefttitle = "\u200b"
+
+            if len(module[0]) == 0:
+                module[0] = "\u200b"
+            if len(module[1]) == 0:
+                module[1] = "\u200b"
+
+            embed.add_field(name=lefttitle, value= module[0], inline=True)
+            embed.add_field(name="\u200b", value= module[1], inline=True)
+            embed.add_field(name="\u200b", value= "\u200b", inline=True)
+
     embed.set_footer(text=f"Total: {len(sorted_teams)} Teams, {len(total_players)} Players")
 
     return embed
@@ -334,7 +366,7 @@ async def division(bot, cup_id, div_number):
 
     return embed
 
-async def map_list(bot, map_list, title, message):
+def map_list(map_list, title):
     maps_string = ""
     for (i, map_info) in enumerate(map_list):
         index_str = (str(i + 1) + ".").ljust(2)
@@ -344,30 +376,19 @@ async def map_list(bot, map_list, title, message):
     embed = discord.Embed(title=title, color=0xFFD700)
     embed.add_field(name="Map", value= maps_string, inline=True)
 
-    # Check if DM or not
-    if message.guild == None:
-        map_list_message = await message.author.send(embed=embed)
-    else:
-        map_list_message = await message.channel.send(embed=embed)
-
-    applied_reaction_emojis = []
-    for i, map_info in enumerate(map_list):
-        await map_list_message.add_reaction(bot.number_emojis[i])
-        applied_reaction_emojis.append(bot.number_emojis[i].name)
-
-    # TODO: drop list
-     # Wait for reaction and check if the user isnt the bot and if the reaction emojis are the correct one
-    def check_reaction(reaction, user):
-            return user.id != bot.user.id and reaction.message == map_list_message and reaction.emoji.name in applied_reaction_emojis
-    reaction, _ = await bot.wait_for('reaction_add', check=check_reaction)
-
-    # Get the choice
-    map_choice = map_list[applied_reaction_emojis.index(reaction.emoji.name)]
-
-    return map_choice
+    return embed
 
 
-def fixture(bot, team1_id, team2_id, date, format):
+def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, format=None, status=None):
+    # Get fixture info
+    bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%s", (fixture_id,))
+    fixture_info = bot.cursor.fetchone()
+    if fixture_info:
+        team1_id = fixture_info['team1']
+        team2_id = fixture_info['team2']
+        date = fixture_info['date']
+        status = fixture_info['status']
+
 
     # Get teams info
     bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team1_id,))
@@ -377,16 +398,29 @@ def fixture(bot, team1_id, team2_id, date, format):
 
     # Get date and time if set yet
     if date:
-        fixture_date_elems = date.split(" ")
-        fixture_date = fixture_date_elems[0]
-        fixture_time = fixture_date_elems[1]
+        fixture_schedule_elems = date.split(" ")
+        fixture_date_elems = fixture_schedule_elems[0].split('-')
+        fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}/{fixture_date_elems[0]}"
+        fixture_time_elems = fixture_schedule_elems[1].split(':')
+        fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
     else:
         fixture_date = "-"
         fixture_time = "-"
 
+    # Get status
+    if status and int(status) == 1:
+        status_str = "Scheduled"
+    elif status and int(status) == 2:
+        status_str = "In progress"
+    elif status and int(status) == 3:
+        status_str = "Finished"
+    else:
+        status_str = "Not scheduled"
+
+
     embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= format)
-    embed.add_field(name=":pencil: Status", value= "-", inline=True)
-    embed.add_field(name=":calendar_spiral: Date", value= fixture_date, inline=True)
+    embed.add_field(name=":pencil: Status", value= status_str, inline=True)
+    embed.add_field(name=":calendar_spiral: Date (DD/MM/YYYY)", value= fixture_date, inline=True)
     embed.add_field(name=":alarm_clock: Time (CET)", value= fixture_time, inline=True)
     embed.add_field(name=":map: Map TS", value= f"-", inline=True)
     embed.add_field(name=":map: Map CTF", value= f"-", inline=True)
@@ -404,11 +438,15 @@ async def match_index(bot, cup_id, channel):
     if fixtures:
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
+            
+            # Get status
+            if fixture_info['status'] != None:
+                continue
 
             # Get fixture link
             fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
 
-            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+            fixture_string += f"{fixture_channel.mention}\n"
 
             if len(fixture_string) > 1900:
                 await channel.send(fixture_string)
@@ -421,10 +459,14 @@ async def match_index(bot, cup_id, channel):
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
 
+            # Get status
+            if fixture_info['status'] != 1:
+                continue
+
             # Get fixture link
             fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
 
-            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+            fixture_string += f"{fixture_channel.mention}\n"
 
             if len(fixture_string) > 1900:
                 await channel.send(fixture_string)
@@ -437,10 +479,14 @@ async def match_index(bot, cup_id, channel):
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
 
+            # Get status
+            if fixture_info['status'] != 2:
+                continue
+
             # Get fixture link
             fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
 
-            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+            fixture_string += f"{fixture_channel.mention}\n"
 
             if len(fixture_string) > 1900:
                 await channel.send(fixture_string)
@@ -453,10 +499,14 @@ async def match_index(bot, cup_id, channel):
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
 
+            # Get status
+            if fixture_info['status'] != 3:
+                continue
+
             # Get fixture link
             fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
 
-            fixture_string += f"``{index_str.ljust(3)}`` {fixture_channel.mention}\n"
+            fixture_string += f"{fixture_channel.mention}\n"
 
             if len(fixture_string) > 1900:
                 await channel.send(fixture_string)
@@ -464,17 +514,103 @@ async def match_index(bot, cup_id, channel):
 
         await channel.send(fixture_string)
 
-    '''   
-    else:
-        fixture_string = "\u200b"
 
-    print(len(fixture_string))
+def calendar(bot, cup_info):
+    # Get fixtures 
+    bot.cursor.execute("SELECT * FROM Fixtures WHERE cup_id=%d", (cup_info['id'],))
+    fixtures = bot.cursor.fetchall()
+
+    fixture_list = []
+    date_list = []
+    for fixture in fixtures:
+        TBD_date = datetime.datetime(2040, 1, 1)
+
+        # Get Team 1 info 
+        bot.cursor.execute("SELECT * FROM Teams WHERE id=%d", (fixture['team1'],))
+        team1 = bot.cursor.fetchone()
+
+        # Get Team 2 info 
+        bot.cursor.execute("SELECT * FROM Teams WHERE id=%d", (fixture['team2'],))
+        team2 = bot.cursor.fetchone()
+
+        fixture_list.append([flag.flagize(team1['country']), team1['tag'], flag.flagize(team2['country']), team2['tag']])
+
+        
+
+        # Filter unscheduled and finished matches
+        if not fixture['status']:
+            date_list.append(TBD_date)
+        else:
+            gamedate = datetime.date.fromisoformat(fixture['date'].split()[0])
+            gametime = datetime.time.fromisoformat(fixture['date'].split()[1])
+            gameschedule = datetime.datetime.combine(gamedate, gametime)
+            date_list.append(gameschedule)
+    
+    sorted_index = sorted(range(len(date_list)), key=lambda k: date_list[k])
+
+    fixture_str1 = ""
+    fixture_str2 = ""
+    date_str = ""
+    modules = []
+    for i in sorted_index:
+        fixture_str1 += f"{fixture_list[i][0]}  ``{fixture_list[i][1]}``\n \n" 
+        fixture_str2 += f"{fixture_list[i][2]}  ``{fixture_list[i][3]}``\n \n" 
+
+        if date_list[i] != TBD_date:
+            fixture_schedule_elems = str(date_list[i]).split(" ")
+            fixture_date_elems = fixture_schedule_elems[0].split('-')
+            fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
+            fixture_time_elems = fixture_schedule_elems[1].split(':')
+            fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
+            date_str += f"``{fixture_date}  -  {fixture_time}`` \n \n"
+        else:
+            date_str += "``--/--  -  --:--`` \n \n"
+            
+
+        # Create a new module if the limit is reached
+        if len(fixture_str1) > 900 or len(fixture_str2) > 900 or len(date_str) > 900:
+            modules.append([date_str, fixture_str1, fixture_str2])
+            fixture_str1 = ""
+            fixture_str2 = ""
+            date_str = ""
+
+
+    if len(date_str) == 0 and len(modules) == 0:
+        date_str = "\u200b"
+        
+    if len(fixture_str1) == 0 and len(modules) == 0:
+        fixture_str1 = "\u200b"
+        fixture_str2 = "\u200b"
+
+    if len(fixture_str1) > 0 and len(modules) > 0:
+        modules.append([date_str, fixture_str1, fixture_str2])
+
     # Create the embed
-    embed = discord.Embed(title=f":dividers: Match index", color=0xFFD700, description=f"Click on a game to jump to their channel")
-    embed.add_field(name="Matches not scheduled", value= fixture_string, inline=False)
-    embed.add_field(name="Matches scheduled but not played", value= fixture_string, inline=True)
-    embed.add_field(name="Matches in progress", value= fixture_string, inline=False)
-    embed.add_field(name="Matches finsihed", value= fixture_string, inline=False)
+    embed = discord.Embed(title=f":calendar_spiral: Calendar", color=13568619)
+    title1 = "\u200b \u200b Date *(CET)* \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b\n \u200b"
+    title2 = "\u200b \u200b \u200bTeam 1\u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b   VS  \u200b \u200b \u200b \n \u200b"
+    title3 = "\u200b \u200b \u200bTeam 2 \n \u200b"
+    if len(modules) == 0:
+        embed.add_field(name=title1, value= date_str, inline=True)
+        embed.add_field(name=title2, value= fixture_str1, inline=True)
+        embed.add_field(name=title3, value= fixture_str2, inline=True)
+
+    else:
+        for (i, module) in enumerate(modules):
+            if i != 0:
+                title1 = "\u200b"
+                title2 = "\u200b"
+                title3 = "\u200b"
+
+            if len(module[0]) == 0:
+                module[0] = "\u200b"
+            if len(module[1]) == 0:
+                module[1] = "\u200b"
+
+            embed.add_field(name=title1, value= module[0], inline=True)
+            embed.add_field(name=title2, value= module[1], inline=True)
+            embed.add_field(name=title3, value= module[2], inline=True)
+
+    #embed.set_footer(text=f"Total: {len(sorted_teams)} Teams, {len(total_players)} Players")
 
     return embed
-    '''

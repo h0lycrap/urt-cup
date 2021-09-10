@@ -17,8 +17,9 @@ class Public(commands.Cog):
     async def info(self, ctx, args=None):
         # Check if there is an arg
         if args==None:
-            await ctx.send(self.bot.quotes['cmdInfo_error_args'])
-            return
+            #await ctx.send(self.bot.quotes['cmdInfo_error_args'])
+            args = f"<@!{ctx.author.id}>"
+            
 
         # Check if this is a mention and extract user id
         if args.startswith("<@!") and args.endswith(">"):

@@ -37,3 +37,10 @@ def players_of_team(bot, team_id, id, include_captain=False, include_invited=Fal
         select_options.append(SelectOption(label = f"{player_info['ingame_name']} ({player_info['urt_auth']}) ", emoji = player_flag, value = i))
 
     return player_info_list, [Select(options = select_options, custom_id=id)]
+
+def maps(map_info_list, id): 
+    select_options = []
+    for (i, map_info) in enumerate(map_info_list):
+        select_options.append(SelectOption(label = map_info['name'], value = i))
+
+    return [Select( placeholder = "Pick a map", options = select_options, custom_id=id)]

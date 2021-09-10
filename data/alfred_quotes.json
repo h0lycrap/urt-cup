@@ -9,6 +9,8 @@
 
 	"cmdUrt5": "soon (tm)",
 
+	"cmdErrorBusy" : "You are currently busy with another action with the bot, finish it and click again",
+
 	"cmdRegister_intro" : "Follow the instructions to register and unlock all the other channels of the **Flawless** server.",
 	"cmdRegister_prompt_auth" : "Enter your urt account name (auth, not game key):",
 	"cmdRegister_error_authalreadyreg" : "Auth already registered.",
@@ -222,8 +224,41 @@
 	"cmdForceRemoveSignup_success" : "Clan removed from signups!",
 	"cmdForceRemoveSignup_log" : "The clan ``{teamname}`` was removed from the signups of the cup ``{cupname}``.",
 
+	"cmdSchedule_date_prompt" : "Enter the date (``DD/MM/YYYY``): \n*Type ``!cancel`` to cancel*",
+	"cmdSchedule_time_prompt" : "Enter the time of the game (``HH:MM``) in the **CEST** timezone. **\nUse 24-hour military time**, example: ``21:00``\n*Type ``!cancel`` to cancel*",
+	"cmdSchedule_cancel" : "Scheduling canceled.",
+	"cmdSchedule_error_time" : "Wrong hour format, please check the instructions.",
+	"cmdSchedule_success" : "Game scheduling invitation sent.",
+	"cmdSchedule_invitation" : "<@&{roleid}> The clan ``{teamname}`` proposes to play the game on ``{gamedate}`` at ``{gametime} CEST``.",
+	"cmdSchedule_invitation_log" : "The clan ``{teamname}`` proposes to play the game against ``{otherteamname}``on ``{gamedate}`` at ``{gametime} CEST``.",
+
+	"cmdSchedule_admin_success" : "Game scheduled.",
+
+	"cmdSchedule_error_notinteam" : "Only a member of the team ``{otherteamname}`` can respond.",
+	"cmdSchedule_accepted" : "The game is now scheduled.",
+	"cmdSchedule_accepted_success" : "<@&{otherroleid}> <@&{roleid}> The game is now scheduled on ``{gamedate}`` at ``{gametime} CEST``.",
+	"cmdSchedule_accepted_log" : "The game ``{teamname}`` vs ``{otherteamname}`` is now scheduled on ``{gamedate}`` at ``{gametime} CEST``.",
+	"cmdSchedule_declined" : "The gamedate proposal is declined.",
+	"cmdSchedule_declined_success" : "<@&{otherroleid}> The game date proposal on ``{gamedate}`` at ``{gametime} CEST`` has been declined, please schedule another time.",
+	"cmdSchedule_declined_log" : "The team ``{teamname}`` declined the team ``{otherteamname}``'s invitation to play on ``{gamedate}`` at ``{gametime} CEST``.",
+
+	"cmdPickBanInvitation_error_busy" : "The pick and ban is already in progress.",
+	"cmdPickBanInvitation_error_gamedate" : "This is not game day yet, if you want to play on this date, reschedule the game.",
+	"cmdPickBanInvitation_error_notscheduled" : "You need to schedule the game first.",
+	"cmdPickBanInvitation_error_finished" : "The game is already on going or is over.",
+	"cmdPickBanInvitation_prompt" : "The pick and ban process is about to start, make sure you have done your knife fight beforehand. The winner chooses whether they want the ban advantage (the last ban) in TS or in CTF. The winner also chooses which map/gamemode is played first. The loser has the advantage of the ban (the last ban) in the other gamemode. Take turns eliminating a map until there is only one left (do it a second time for the other gamemode).\n**Which team won the knife fight?** Both teams need to click to start the process.",
+
+	"cmdPickBan_error_wrong_team_click" : "Only a member of the clan ``{teamname}`` can respond.",
+	"cmdPickBan_gamemode_advantage_prompt" : "<@&{team1_role_id}> For which gamemode do you want to have the ban advantage (the ability to pick between the last two maps)?",
+	"cmdPickBan_TS_intro" : "We will first start the process for **TS**. The team <@&{mapadvantage_ctf_role_id}> will **ban** the first map, then each clan will take turn to **ban** a map until there are only 2 maps left. The team <@&{mapadvantage_ts_role_id}> will **pick** between the remaining 2 maps.",
+	"cmdPickBan_CTF_intro" : "Now the same process applies for **CTF**. The team <@&{mapadvantage_ts_role_id}> will **ban** the first map, then each clan will take turn to **ban** a map until there are only 2 maps left. The team <@&{mapadvantage_ctf_role_id}> will **pick** between the remaining 2 maps.",
+	"cmdPickBan_prompt_ban" : "<@&{team_role_id}> select a map to **ban**. Be careful, once you clicked on the map, the choice is definitive.",
+	"cmdPickBan_ban_success" : "The map ``{mapname}`` has been banned.",
+	"cmdPickBan_prompt_pick" : "<@&{team_role_id}> **pick** that map that will be played. Be careful, once you clicked on the map, the choice is definitive.",
+	"cmdPickBan_pick_success" : "The map ``{mapname}`` in **{gamemode}** will be played.",
+	"cmdPickBan_bo2_end" : "You can now start the game, the team ``{teamname}`` will choose which gamemode is played first. The game is ``{tsmap}`` **TS** and ``{ctfmap}`` **CTF**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on https://urt.li after clicking on the tab *Flawless Upload*. \n GL & HF!",
+	
 	"cmdSchedule_error_args" : "Please use the command as following: ``!schedule <date> <time (CET)>``",
 	"cmdSchedule_error_date" : "Invalid date format. Please use ``DD/MM/YYYY``",
-	"cmdSchedule_error_time" : "Invalid time format. Please use ``HH:MM``",
 	"cmdSchedule_confirmation" : "Match shceduled, check the updated match info at the top of the channel."
 }

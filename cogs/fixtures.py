@@ -1,3 +1,5 @@
+from logging import disable
+from operator import truediv
 import discord
 from discord.ext import commands
 import cogs.common.utils as utils
@@ -6,6 +8,7 @@ import cogs.common.dropmenus as dropmenus
 import cogs.common.update as update
 import time 
 import datetime
+import flag
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
@@ -32,7 +35,7 @@ class Fixtures(commands.Cog):
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Nice try, but you need to be an admin to press this.")
                 return
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="What action do you want to perform?", components=[[
-                Button(style=ButtonStyle.blue, label="Schedule", custom_id=f"button_schedule_fixture"),
+                Button(style=ButtonStyle.blue, label="Schedule", custom_id=f"button_schedule_fixture_admin"),
                 Button(style=ButtonStyle.blue, label="Enter scores", custom_id=f"button_enter_scores"),
                 Button(style=ButtonStyle.red, label="Delete fixture", custom_id=f"button_delete_fixture"),
             ]])
@@ -42,6 +45,16 @@ class Fixtures(commands.Cog):
             await self.schedule_fixture(interaction)
         elif interaction.component.id.startswith("button_accept_fixture_schedule_"):
             await self.schedule_accept(interaction)
+            self.bot.async_loop.create_task(update.fixtures(self.bot))
+        elif interaction.component.id.startswith("button_decline_fixture_schedule_"):
+            await self.schedule_decline(interaction)
+        elif interaction.component.id.startswith("button_schedule_fixture_admin"):
+            await self.schedule_fixture_admin(interaction)
+            self.bot.async_loop.create_task(update.fixtures(self.bot))
+        elif interaction.component.id.startswith("button_fixture_startpickban"):
+            await self.pickban_invitation(interaction)
+        elif interaction.component.id.startswith("button_pickban_knifewon"):
+            await self.pickban_knifewon(interaction)
 
 
     async def create_fixture(self, interaction):
@@ -154,8 +167,6 @@ class Fixtures(commands.Cog):
         role_team1 = discord.utils.get(self.guild.roles, id=int(team1['role_id'])) 
         role_team2 = discord.utils.get(self.guild.roles, id=int(team2['role_id'])) 
 
-        print(role_team1, role_team2)
-
         # Set the permissions
         overwrites = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -179,7 +190,7 @@ class Fixtures(commands.Cog):
         # Send fixture card
         fixture_id = self.bot.cursor.lastrowid
         
-        embed = embeds.fixture(self.bot, team1['id'], team2['id'], None, fixture_format)
+        embed = embeds.fixture(bot=self.bot, team1_id=team1['id'], team2_id=team2['id'], date=None, format=fixture_format)
         fixture_card = await fixture_channel.send(embed=embed, components=[[
             Button(style=ButtonStyle.blue, label="Schedule game", custom_id=f"button_fixture_schedule"),
             Button(style=ButtonStyle.blue, label="Start pick & ban", custom_id=f"button_fixture_startpickban"),
@@ -215,83 +226,124 @@ class Fixtures(commands.Cog):
 
             # TODO WHEN PLAYER IMPLEMENTED DELETE HERE TOO 
 
-    @commands.command() 
-    async def schedule(self, ctx):
-        # permissions
-        if  not ctx.author.guild_permissions.manage_guild:
+    async def pickban_invitation(self, interaction):
+        # Check if fixture busy
+        if interaction.message.channel.id in self.bot.fixtures_busy:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_busy'])
             return
 
-        # Check args
-        args = ctx.message.content[len("!schedule"):].split()
-        if len(args) != 2:
-            await ctx.channel.send(self.bot.quotes['cmdSchedule_error_args'])
-            return
-
-        # Check date
-        date_checked, date = utils.check_date_format(args[0])
-        if not date_checked:
-            await ctx.channel.send(self.bot.quotes['cmdSchedule_error_date'])
-            return
-
-        # Check time 
-        time_checked, time = utils.check_time_format(args[1])
-        if not time_checked:
-            await ctx.channel.send(self.bot.quotes['cmdSchedule_error_time'])
-            return
-
-        # Add time to date
-        date= date.replace(hour= time.hour, minute = time.minute)
-
-        # Update the date in the DB
-        self.bot.cursor.execute("UPDATE Fixtures SET date=%s WHERE channel_id = %s", (date, str(ctx.channel.id)))
-        self.bot.conn.commit()
-
-        # Update the embed
-        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id = %s", (str(ctx.channel.id),))
-        fixture_info = self.bot.cursor.fetchone()
-        fixture_card = await ctx.channel.fetch_message(fixture_info['embed_id'])
-        embed = embeds.fixture(self.bot, fixture_info['id'])
-        await fixture_card.edit(embed=embed)
-
-        await ctx.channel.send(self.bot.quotes['cmdSchedule_confirmation'])
-
-
-    @commands.command() 
-    async def pickban(self, ctx):
-        # Check if there is not another operation happening for this fixture
-        if ctx.channel.id in self.bot.fixtures_busy:
-            return
-        self.bot.fixtures_busy.append(ctx.channel.id)
-
-        # Get fixture info
-        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id = %s", (str(ctx.channel.id),))
+        # Get  feature  
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
         fixture_info = self.bot.cursor.fetchone()
 
-        # Get team1 and team2 info
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (fixture_info['team1'],))
-        team1 = self.bot.cursor.fetchone()
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (fixture_info['team2'],))
-        team2 = self.bot.cursor.fetchone()
-        clan_info_list = [team1, team2]
-
-        # Find out who won the knife fight
-        clan_choice = await embeds.team_list(self.bot, clan_info_list, "The team who won the knife fight decides which team starts to ban a map for TS first (the other team will ban a map for CTF first). Which team will start banning a **TS map**?", ctx)
-        team_picking_ts_first = clan_choice
-        if clan_choice['tag'] == team1['tag']:
-            team_picking_ctf_first = team2
-        else:
-            team_picking_ctf_first = team1
-
-        # TODO : Change maps to ban to 6 and 4 when there will be 7 maps for each mode
-        # Check if BO2 (1 map per mode to pick) or BO5(2 maps per mode)
-        if (fixture_info['format'] == 'BO2'):
-            maps_to_ban = 2
-            maps_to_pick = 1
-        elif (fixture_info['format'] == 'BO5'):
-            maps_to_ban = 1
-            maps_to_pick = 2
-        else:
+        # Check if the game is scheduled and not finished
+        if not fixture_info['status']:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_notscheduled'])
             return
+        elif fixture_info['status'] != 1:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_finished'])
+            return
+
+        #Flag busy
+        self.bot.fixtures_busy.append(interaction.message.channel.id)
+
+        # Get clans info
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+        team1_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+        team2_info = self.bot.cursor.fetchone()
+
+        # Check if we are match day
+        gamedate = datetime.date.fromisoformat(fixture_info['date'].split()[0])
+        if gamedate != datetime.datetime.now().date():
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_gamedate'])
+            self.bot.fixtures_busy.remove(interaction.message.channel.id)
+            return
+
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_prompt'], components=[[
+                Button(style=ButtonStyle.blue, label=f"{team1_info['tag']}", emoji=flag.flagize(team1_info['country']), custom_id=f"button_pickban_knifewon_{team1_info['id']}"),
+                Button(style=ButtonStyle.blue, label=f"{team2_info['tag']}", emoji=flag.flagize(team2_info['country']), custom_id=f"button_pickban_knifewon_{team2_info['id']}")]], ephemeral=False)
+
+
+    async def pickban_knifewon(self, interaction):
+        # Get  feature  
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Get clans info
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+        team1_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+        team2_info = self.bot.cursor.fetchone()
+
+        # Get the team of the clicker
+        user = discord.utils.get(self.guild.members, id=interaction.user.id)
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1_info['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2_info['role_id']))
+        if team1_role in user.roles:
+            team_click = team1_info
+            otherteam_click = team2_info
+        elif team2_role in user.roles:
+            team_click = team2_info
+            otherteam_click = team1_info
+        else:
+            print(f"ERROR: can't retrieve clicking team for fixture {fixture_info['id']}")  
+            self.bot.fixtures_busy.remove(interaction.message.channel.id)
+            return  
+
+        # Check if the team was clicked before
+        team_clicked_before_id = interaction.component.id.split("_")[-2]
+        both_team_agreed = False
+        if team_clicked_before_id == str(otherteam_click['id']):
+            both_team_agreed = True
+
+        # Get team from button
+        team_id = interaction.component.id.split("_")[-1]
+        if team_id == str(team1_info['id']):
+            team_button = team1_info
+            other_team_button = team2_info
+            team1_button_style = ButtonStyle.green
+            team2_button_style = ButtonStyle.blue
+            if both_team_agreed:
+                team1_button_label = f"{team1_info['tag']}"
+            else:
+                team1_button_label = f"{team1_info['tag']} (claimed by {team_click['tag']})"
+            team2_button_label = f"{team2_info['tag']}"
+            team1_button_id = f"button_pickban_knifewon_{team_click['id']}_{team1_info['id']}"
+            team2_button_id = f"button_pickban_knifewon_{team2_info['id']}"
+            
+        elif team_id == str(team2_info['id']):
+            team_button = team2_info
+            other_team_button = team1_info
+            team1_button_style = ButtonStyle.blue
+            team2_button_style = ButtonStyle.green
+            if both_team_agreed:
+                team2_button_label = f"{team2_info['tag']}"
+            else:
+                team2_button_label = f"{team2_info['tag']} (claimed by {team_click['tag']})"
+            team1_button_label = f"{team1_info['tag']}"
+            team2_button_id = f"button_pickban_knifewon_{team_click['id']}_{team2_info['id']}"
+            team1_button_id = f"button_pickban_knifewon_{team1_info['id']}"
+        else:
+            print(f"ERROR: cant retrieve team from button for fixture {fixture_info['id']}")
+            self.bot.fixtures_busy.remove(interaction.message.channel.id)
+            return 
+
+        await interaction.message.edit(self.bot.quotes['cmdPickBanInvitation_prompt'], components=[[
+                Button(style=team1_button_style, label=team1_button_label, emoji=flag.flagize(team1_info['country']), custom_id=team1_button_id, disabled=both_team_agreed),
+                Button(style=team2_button_style, label=team2_button_label, emoji=flag.flagize(team2_info['country']), custom_id=team2_button_id, disabled=both_team_agreed)]])
+
+
+        await interaction.respond(type=6)
+
+        if both_team_agreed:
+            if (fixture_info['format'] == 'BO2'):
+                await self.pickban_bo2(fixture_info, team_button, other_team_button, interaction.message.channel)
+
+            # TODO Implement BO3 and BO5
+
+    # Team 1 won the knife fight
+    async def pickban_bo2(self, fixture_info, team1, team2, channel):
 
         # Get map lists
         self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('TS',))
@@ -299,39 +351,163 @@ class Fixtures(commands.Cog):
         self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('CTF',))
         ctf_map_list = self.bot.cursor.fetchall()
 
-        # TODO: Check role and use text entry
-        # Pick TS Maps
-        ts_maps = []
-        for i in range(maps_to_ban):
-            banned_map = await embeds.map_list(self.bot, ts_map_list, "TS - TO BAN :x:", ctx)
-            ts_map_list.remove(banned_map)
-            await ctx.channel.send(f":x: Banned: ``{banned_map['name']}``")
-        for i in range(maps_to_pick):
-            picked_map = await embeds.map_list(self.bot, ts_map_list, "TS - TO PICK :white_check_mark:", ctx)
-            ts_maps.append(picked_map['name'])
-            ts_map_list.remove(picked_map)
-            await ctx.channel.send(f":white_check_mark: Picked: ``{picked_map['name']}``")
+        # Get team roles
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2['role_id']))
+
+
+        # Ask winning team what map advantage they want 
+        mapadvantage_msg = await channel.send(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+            Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ban_advantage_ts"),
+            Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ban_advantage_ctf")
+        ]])
+
+        gamemode_advantage_check = False
+        while not gamemode_advantage_check:
+            interaction_gamemodeadvantage = await self.bot.wait_for("button_click", check = lambda i: i.component.id.startswith("button_gamemode_ban_advantage"))
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_gamemodeadvantage.author.id)
+            if team1_role in user_clicking.roles:
+                gamemode_advantage_check = True
+            else:
+                await interaction_gamemodeadvantage.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team1['name']))
+
+        if interaction_gamemodeadvantage.component.id == 'button_gamemode_ban_advantage_ts':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.green, label="TS", custom_id="button_gamemode_ban_advantage_ts", disabled=True),
+                Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ban_advantage_ctf", disabled=True)
+            ]])
+            mapadvantage_ts = team1
+            mapadvantage_ctf = team2
 
         
-        # Pick TS Map
-        ctf_maps = []
-        for i in range(maps_to_ban):
-            banned_map = await embeds.map_list(self.bot, ctf_map_list, "CTF - TO BAN :x:", ctx)
-            ctf_map_list.remove(banned_map)
-            await ctx.channel.send(f":x: Banned: ``{banned_map['name']}``")
-        for i in range(maps_to_pick):
-            picked_map = await embeds.map_list(self.bot, ctf_map_list, "CTF - TO PICK :white_check_mark:", ctx)
-            ctf_maps.append(picked_map['name'])
-            ctf_map_list.remove(picked_map)
-            await ctx.channel.send(f":white_check_mark: Picked: ``{picked_map['name']}``")
+        if interaction_gamemodeadvantage.component.id == 'button_gamemode_ban_advantage_ctf':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ban_advantage_ts", disabled=True),
+                Button(style=ButtonStyle.green, label="CTF", custom_id="button_gamemode_ban_advantage_ctf", disabled=True)
+            ]])
+            mapadvantage_ts = team2
+            mapadvantage_ctf = team1
+
+        await interaction_gamemodeadvantage.respond(type=6)
+        ts_map = await self.banuntil2(mapadvantage_ctf, mapadvantage_ts, channel, "TS")
+        ctf_map = await self.banuntil2(mapadvantage_ctf, mapadvantage_ts, channel, "CTF")
+
+        # Add maps to DB
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ts_map['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ctf_map['id']))
+        self.bot.conn.commit()
+
+        # Set fixture to on-going
+        self.bot.cursor.execute("UPDATE Fixtures set status = 2 WHERE id=%s", (fixture_info['id'],))
+        self.bot.conn.commit()
 
         # Remove busy status
-        self.bot.fixtures_busy.remove(ctx.channel.id)
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_bo2_end'].format(teamname=team1['name'], tsmap=ts_map['name'], ctfmap=ctf_map['name']))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
+
+
+    async def banuntil2(self, mapadvantage_ctf, mapadvantage_ts, channel, gamemode):
+        if gamemode == "TS":
+            # Start TS pick and ban
+            await channel.send(self.bot.quotes['cmdPickBan_TS_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
+            # The ctf advantage team starts to ban
+            team_toban = mapadvantage_ctf
+        else:
+            # Start CTF pick and ban
+            await channel.send(self.bot.quotes['cmdPickBan_CTF_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
+            # The ctf advantage team starts to ban
+            team_toban = mapadvantage_ts
+
+        # Get maps
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s;", (gamemode,))
+        maps = self.bot.cursor.fetchall()
+        maps.sort(key=lambda x: x['name'])
+
+        embed_title = f"{gamemode} Maps"
+
+        # Send embeds with the remaining maps
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        # Ban until 2 maps are left
+        while len(maps) > 2:
+            # Prompt the ban
+            pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+
+            # Get banning team role
+            team_toban_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+            ban_check = False
+            while not ban_check:
+                interaction_ban = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts")
+                map_toban = maps[int(interaction_ban.component[0].value)]
+                user_clicking = discord.utils.get(self.guild.members, id=interaction_ban.author.id)
+                if team_toban_role in user_clicking.roles:
+                    ban_check = True
+                else:
+                    await interaction_ban.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+
+            await interaction_ban.respond(type=6)
+            # Ban the map
+            maps.remove(map_toban)
+
+            # Edit embed and delete prompt
+            await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name']))
+            map_embed = embeds.map_list(maps, embed_title)
+            await channel.send(embed=map_embed)
+            await pickban_prompt_msg.delete()
+
+            # Switch banning team
+            if team_toban == mapadvantage_ctf:
+                team_toban = mapadvantage_ts
+            else:
+                team_toban = mapadvantage_ctf
+
+        # Pick between the last two maps
+        # Prompt the pick
+        pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+
+        # Get banning team role
+        if gamemode == "TS":
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_pick'].format(team_role_id=mapadvantage_ts['role_id']), components=pickban_dropmenu)
+            team_topick_role = discord.utils.get(self.guild.roles, id= int(mapadvantage_ts['role_id']))
+        else:
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_pick'].format(team_role_id=mapadvantage_ctf['role_id']), components=pickban_dropmenu)
+            team_topick_role = discord.utils.get(self.guild.roles, id= int(mapadvantage_ctf['role_id']))
+
+        pick_check = False
+        while not pick_check:
+            interaction_pick = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts")
+            picked_map = maps[int(interaction_pick.component[0].value)]
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_pick.author.id)
+            if team_topick_role in user_clicking.roles:
+                pick_check = True
+            else:
+                if gamemode == "TS":
+                    await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=mapadvantage_ts['name']))
+                else:
+                    await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=mapadvantage_ctf['name']))
+
+        await interaction_pick.respond(type=6)
+
+        # Delete prompt
+        await pickban_prompt_msg.delete()
+
+        await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map['name'], gamemode=gamemode))
+
+        return picked_map    
 
     async def schedule_fixture(self, interaction):
         # Check if user is busy
         if interaction.author.id in self.bot.users_busy:
-            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='You are currently busy with another action with the bot, finish it and click again')
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdErrorBusy'])
             return
 
         # Flag as busy
@@ -377,13 +553,13 @@ class Fixtures(commands.Cog):
         # Wait for game date
         game_date_checked = False
         while not game_date_checked:
-            await interaction.author.send("Enter the date (``DD/MM/YYYY``): \n*Type ``!cancel`` to cancel*")
+            await interaction.author.send(self.bot.quotes['cmdSchedule_date_prompt'])
             gamedate_msg = await self.bot.wait_for('message', check=check)
             gamedate = gamedate_msg.content.lower().strip()
 
             # Cancel 
             if gamedate == '!cancel':
-                await interaction.author.send("Game scheduling canceled.")
+                await interaction.author.send(self.bot.quotes['cmdSchedule_cancel'])
                 # Remove busy status
                 self.bot.users_busy.remove(interaction.author.id)
                 return
@@ -396,13 +572,13 @@ class Fixtures(commands.Cog):
         # Wait for game hour
         game_time_checked = False
         while not game_time_checked:
-            await interaction.author.send("Enter the time of the game (``HH:MM``) in the **CEST** timezone. **\nUse 24-hour military time**, example: ``21:00``\n*Type ``!cancel`` to cancel*")
+            await interaction.author.send(self.bot.quotes['cmdSchedule_time_prompt'])
             gametime_msg = await self.bot.wait_for('message', check=check)
             gametime = gametime_msg.content.lower().strip()
 
             # Cancel 
             if gametime == '!cancel':
-                await interaction.author.send("Game scheduling canceled.")
+                await interaction.author.send(self.bot.quotes['cmdSchedule_cancel'])
                 # Remove busy status
                 self.bot.users_busy.remove(interaction.author.id)
                 return
@@ -410,19 +586,223 @@ class Fixtures(commands.Cog):
             game_time_checked, gametime_formatted = utils.check_time_format(gametime)
 
             if not game_time_checked:
-                await interaction.author.send("Wrong hour format, please check the instructions.")
+                await interaction.author.send(self.bot.quotes['cmdSchedule_error_time'])
 
-        await interaction.author.send("Game scheduling successful.")
+        await interaction.author.send(self.bot.quotes['cmdSchedule_success'])
+
+        # Remove busy status
+        self.bot.users_busy.remove(interaction.author.id)
 
         gameschedule = datetime.datetime.combine(gamedate_formatted, gametime_formatted)
-        print(gameschedule)
 
 
-        await interaction.message.channel.send(f"<@&{other_team_info['role_id']}> The clan ``{team_info['name']}`` proposes to play the game on ``{gamedate}`` at ``{gametime} CEST``.", components=[[
-            Button(style=ButtonStyle.green, label="Accept", custom_id=f"button_accept_fixture_schedule_{gameschedule}"),
-            Button(style=ButtonStyle.red, label="Decline", custom_id=f"button_decline_fixture_schedule_{gameschedule}")
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_invitation'].format(roleid=other_team_info['role_id'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime), components=[[
+            Button(style=ButtonStyle.green, label="Accept", custom_id=f"button_accept_fixture_schedule_{other_team_info['id']}_{gameschedule}"),
+            Button(style=ButtonStyle.red, label="Decline", custom_id=f"button_decline_fixture_schedule_{other_team_info['id']}_{gameschedule}")
             ]])
+
+        # Log
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdSchedule_invitation_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+
+
+    async def schedule_fixture_admin(self, interaction):
+        # Check if user is busy
+        if interaction.author.id in self.bot.users_busy:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdErrorBusy'])
+            return
+
+        # Flag as busy
+        self.bot.users_busy.append(interaction.author.id)
+                
+        # Get fixture info
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Get clans info
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+        team_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+        other_team_info = self.bot.cursor.fetchone()
+
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=f"Check dms!")
+
+        def check(m):
+            return m.author == interaction.author and m.guild == None
+
+        # Wait for game date
+        game_date_checked = False
+        while not game_date_checked:
+            await interaction.author.send(self.bot.quotes['cmdSchedule_date_prompt'])
+            gamedate_msg = await self.bot.wait_for('message', check=check)
+            gamedate = gamedate_msg.content.lower().strip()
+
+            # Cancel 
+            if gamedate == '!cancel':
+                await interaction.author.send(self.bot.quotes['cmdSchedule_cancel'])
+                # Remove busy status
+                self.bot.users_busy.remove(interaction.author.id)
+                return
+
+            game_date_checked, gamedate_formatted = utils.check_date_format(gamedate)
+
+            if not game_date_checked:
+                await interaction.author.send(self.bot.quotes['cmdCreateCup_error_date'])
+
+        # Wait for game hour
+        game_time_checked = False
+        while not game_time_checked:
+            await interaction.author.send(self.bot.quotes['cmdSchedule_time_prompt'])
+            gametime_msg = await self.bot.wait_for('message', check=check)
+            gametime = gametime_msg.content.lower().strip()
+
+            # Cancel 
+            if gametime == '!cancel':
+                await interaction.author.send(self.bot.quotes['cmdSchedule_cancel'])
+                # Remove busy status
+                self.bot.users_busy.remove(interaction.author.id)
+                return
+
+            game_time_checked, gametime_formatted = utils.check_time_format(gametime)
+
+            if not game_time_checked:
+                await interaction.author.send(self.bot.quotes['cmdSchedule_error_time'])
+
+        await interaction.author.send(self.bot.quotes['cmdSchedule_admin_success'])
+
+        # Remove busy status
+        self.bot.users_busy.remove(interaction.author.id)
+
+        gameschedule = datetime.datetime.combine(gamedate_formatted, gametime_formatted)
+        gamedate_str = str(gameschedule)
+
+        # Update in DB
+        self.bot.cursor.execute("UPDATE Fixtures set date=%s WHERE id=%s", (gamedate_str, fixture_info['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("UPDATE Fixtures set status=1 WHERE id=%s", (fixture_info['id'],))
+        self.bot.conn.commit()
+
+        # Notify
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_success'].format(otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime))
+
+        # Update embed
+        embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
+        fixture_embed = embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed)
+
+        # Log
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+
+    async def schedule_accept(self, interaction):
+        # Get fixture info
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Get clan info
+        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id=%s", (interaction.author.id,))
+        user_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id=%s and (team_id=%s or team_id=%s)", (user_info['id'], fixture_info['team1'], fixture_info['team2']))
+        roster_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (roster_info['team_id'],))
+        team_info = self.bot.cursor.fetchone()
+
+        # Get other team info
+        if int(fixture_info['team1']) == int(team_info['id']):
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+            other_team_info = self.bot.cursor.fetchone()
+        elif int(fixture_info['team2']) == int(team_info['id']):
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+            other_team_info = self.bot.cursor.fetchone()
+        else:
+            self.bot.users_busy.remove(interaction.author.id)
+            print("problem", team_info['id'], fixture_info['team1'], fixture_info['team2'])
+            return
+
+        # Get fixture date
+        gamedate_str = interaction.component.id.split("_")[-1]
+        gamedate = datetime.date.fromisoformat(gamedate_str.split()[0])
+        gametime = datetime.time.fromisoformat(gamedate_str.split()[1])
+        gameschedule = datetime.datetime.combine(gamedate, gametime)
         
+        # Check if the other team clicked
+        invited_team_id = interaction.component.id.split("_")[-2]
+        print(team_info['id'], invited_team_id)
+        if int(team_info['id']) != int(invited_team_id):
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_error_notinteam'].format(otherteamname=other_team_info['name']))
+            return
+        
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_accepted'])
+
+        # Update in DB
+        self.bot.cursor.execute("UPDATE Fixtures set date=%s WHERE id=%s", (gamedate_str, fixture_info['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("UPDATE Fixtures set status=1 WHERE id=%s", (fixture_info['id'],))
+        self.bot.conn.commit()
+
+        # Notify
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_success'].format(otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime))
+
+        await interaction.message.delete()
+
+        # Update embed
+        embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
+        fixture_embed = embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed)
+
+        # Log
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+
+    async def schedule_decline(self, interaction):
+        # Get fixture info
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Get clan info
+        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id=%s", (interaction.author.id,))
+        user_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id=%s and (team_id=%s or team_id=%s)", (user_info['id'], fixture_info['team1'], fixture_info['team2']))
+        roster_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (roster_info['team_id'],))
+        team_info = self.bot.cursor.fetchone()
+
+        # Get other team info
+        if int(fixture_info['team1']) == int(team_info['id']):
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+            other_team_info = self.bot.cursor.fetchone()
+        elif int(fixture_info['team2']) == int(team_info['id']):
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+            other_team_info = self.bot.cursor.fetchone()
+        else:
+            self.bot.users_busy.remove(interaction.author.id)
+            print("problem", team_info['id'], fixture_info['team1'], fixture_info['team2'])
+            return
+
+        # Get fixture date
+        gamedate_str = interaction.component.id.split("_")[-1]
+        gamedate = datetime.date.fromisoformat(gamedate_str.split()[0])
+        gametime = datetime.time.fromisoformat(gamedate_str.split()[1])
+        gameschedule = datetime.datetime.combine(gamedate, gametime)
+        
+        # Check if the other team clicked
+        invited_team_id = interaction.component.id.split("_")[-2]
+        print(team_info['id'], invited_team_id)
+        if int(team_info['id']) != int(invited_team_id):
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_error_notinteam'].format(otherteamname=other_team_info['name']))
+            return
+        
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_declined'])
+
+        # Notify
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_declined_success'].format(otherroleid=other_team_info['role_id'], gamedate=gamedate, gametime=gametime))
+
+        await interaction.message.delete()
+
+        # Log
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdSchedule_declined_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+
 
 def setup(bot):
     bot.add_cog(Fixtures(bot))
