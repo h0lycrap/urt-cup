@@ -52,6 +52,8 @@ class Cups(commands.Cog):
             await self.add_team_division(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_remove_team_div"):
             await self.remove_team_division(cup_info, user, user_info, is_admin, interaction)
+        elif interaction.component.id.startswith("button_fixpoints_"):
+            await self.fix_points_division(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_delete_div"):
             await self.delete_division(cup_info, user, user_info, is_admin, interaction)
         else:
@@ -203,6 +205,7 @@ class Cups(commands.Cog):
         # Create category and channels
         role_flawless = discord.utils.get(self.guild.roles, id=int(self.bot.role_flawless_crew_id))
         role_moderator = discord.utils.get(self.guild.roles, id=int(self.bot.role_moderator_id))
+        role_streamer = discord.utils.get(self.guild.roles, id=int(self.bot.role_streamer_id))
         role_bot = discord.utils.get(self.guild.roles, id=int(self.bot.role_bot_id))
         role_unreg = discord.utils.get(self.guild.roles, id=int(self.bot.role_unregistered_id))
         category = await self.guild.create_category_channel(f"\U0001F947┋ {name}")
@@ -240,6 +243,7 @@ class Cups(commands.Cog):
         chan_signups = await category.create_text_channel("signups")
         chan_calendar = await category.create_text_channel("calendar")
         chan_stage = await category.create_text_channel("stage")
+        chan_results = await category.create_text_channel("results")
 
         # Create Match schedule and match index chan
         category_match_schedule = await self.guild.create_category_channel(f"{name}┋ \U0001F4C5 Match Schedule")
@@ -248,8 +252,9 @@ class Cups(commands.Cog):
         await chan_match_index.set_permissions(self.guild.default_role, view_channel=False)
         await chan_match_index.set_permissions(role_flawless, view_channel=True)
         await chan_match_index.set_permissions(role_moderator, view_channel=True)
+        await chan_match_index.set_permissions(role_streamer, view_channel=True)
 
-        self.bot.cursor.execute("INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster) VALUES (%s, %d,  %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s)", (name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster))
+        self.bot.cursor.execute("INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster, chan_results_id) VALUES (%s, %d,  %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster, chan_results.id))
         cup_id = self.bot.cursor.lastrowid
         self.bot.conn.commit()
 
@@ -693,8 +698,14 @@ class Cups(commands.Cog):
         divisions = self.bot.cursor.fetchall()
         div_number = len(divisions) + 1
 
+        # Create div match schedule category
+        category_match_schedule = await self.guild.create_category_channel(f"\U0001F4C5┋{cup_info['name']}┋D{div_number} Round1->6")
+
+        # Create archive category
+        category_archive = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
+
         # Add division in the DB
-        self.bot.cursor.execute("INSERT INTO Divisions (div_number, cup_id) VALUES (%s, %s)", (div_number, cup_info['id']))
+        self.bot.cursor.execute("INSERT INTO Divisions (div_number, cup_id, category_id, archive_category_id) VALUES (%s, %s, %s, %s)", (div_number, cup_info['id'], category_match_schedule.id, category_archive.id))
         self.bot.conn.commit()
 
         # Add division edit message in the admin channel
@@ -705,7 +716,8 @@ class Cups(commands.Cog):
                                     Button(style=ButtonStyle.blue, label="Create fixtures for entire division", custom_id=f"button_create_fixtures_div_{div_number}")
                                 ],
                                 [
-                                    Button(style=ButtonStyle.red, label="Delete division", custom_id=f"button_delete_div_{div_number}"),
+                                    Button(style=ButtonStyle.blue, label="Fix Points", custom_id=f"button_fixpoints_{div_number}"),
+                                    Button(style=ButtonStyle.red, label="Delete division", custom_id=f"button_delete_div_{div_number}")
                                 ]])
 
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=f"Div {div_number} created.")
@@ -785,9 +797,100 @@ class Cups(commands.Cog):
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdRemoveTeamDiv_log'].format(teamname=team_to_remove['name'], div_number=div_number, cupname=cup_info['name']))
 
+    async def fix_points_division(self, cup_info, user, user_info, is_admin, interaction):
+        # Get the division
+        div_number = interaction.component.id.split("_")[-1]
+
+        # Get which team to edit
+        self.bot.cursor.execute("SELECT * FROM Signups s INNER JOIN Teams t ON s.team_id = t.id WHERE s.cup_id = %s and div_number=%s", (cup_info['id'], div_number))
+        teams_in_div = self.bot.cursor.fetchall()
+
+        if not teams_in_div:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No teams to edit")
+            return
+
+        team_to_edit_dropmenu = dropmenus.teams(teams_in_div, "Select a team", f"dropmenu_team_to_edit_{div_number}") 
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=f"For which team do you want to change the points?", components=team_to_edit_dropmenu)
+        interaction_team_to_edit = await self.bot.wait_for("select_option", check = lambda i: i.user.id == user.id and i.parent_component.id == f"dropmenu_team_to_edit_{div_number}")
+        team_to_edit = teams_in_div[int(interaction_team_to_edit.component[0].value)]
+
+        # Ask confirmation
+        await interaction_team_to_edit.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdFixPoints_confirmation'].format(teamname=team_to_edit['name'], div_number=div_number), components=[[
+                                    Button(style=ButtonStyle.green, label="Yes", custom_id="button_editpoints_yes"),
+                                    Button(style=ButtonStyle.red, label="No", custom_id="button_editpoints_no"),]])
+        interaction_addteamdivconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == user.id and i.component.id.startswith("button_editpoints_"))
+
+        if interaction_addteamdivconfirmation.component.id == 'button_editpoints_no':
+            await interaction_addteamdivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddTeamDiv_cancel'])
+            return
+        
+        if interaction_addteamdivconfirmation.component.id == 'button_editpoints_yes':
+
+            # Flag the user as busy
+            self.bot.users_busy.append(interaction.author.id)
+
+            await interaction_addteamdivconfirmation.respond(type=6)
+
+            def check(m):
+                return m.author == interaction.author and m.channel == interaction.message.channel
+
+            # Wait for new W/D/L and check validity
+            wdl_checked = False
+            error_msg = None
+            while not wdl_checked:
+                prompt_msg = await interaction.message.channel.send(self.bot.quotes['cmdFixPoints_prompt'])
+                wdl_msg = await self.bot.wait_for('message', check=check)
+                wdl = wdl_msg.content.lower().strip()
+
+                # Delete error message if any
+                try:
+                    await error_msg.delete()
+                except:
+                    pass
+
+                # Cancel 
+                if wdl.lower() == '!cancel':
+                    await prompt_msg.delete()
+                    await wdl_msg.delete()
+                    # Remove busy status
+                    self.bot.users_busy.remove(interaction.author.id)
+                    return
+
+                wdl_elements = wdl.split('/')
+                if len(wdl_elements) != 3 or not wdl_elements[0].isnumeric() or not wdl_elements[1].isnumeric() or not wdl_elements[2].isnumeric():
+                    await prompt_msg.delete()
+                    await wdl_msg.delete()
+                    error_msg = await interaction.message.channel.send(self.bot.quotes['cmdFixPoints_error'])
+                    continue
+
+                else:
+                    win = int(wdl_elements[0])
+                    draw = int(wdl_elements[1])
+                    loss = int(wdl_elements[2])
+                    points = win * 3 + draw
+                    wdl_checked = True
+                    # Remove busy status
+                    self.bot.users_busy.remove(interaction.author.id)
+
+            # Update points
+            self.bot.cursor.execute("UPDATE Signups SET win = %s, draw=%s, loss=%s, points=%s WHERE cup_id=%s and team_id=%s", (win, draw, loss, points, cup_info['id'], team_to_edit['id']))
+            self.bot.conn.commit()
+
+            # Delete msgs
+            await prompt_msg.delete()
+            await wdl_msg.delete()
+
+
     async def delete_division(self, cup_info, user, user_info, is_admin, interaction):
         # Get the division
         div_number = interaction.component.id.split("_")[-1]
+
+        # Get div info
+        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s and div_number=%s", (cup_info['id'], div_number))
+        div_info = self.bot.cursor.fetchone()
+
+        # Get category
+        #match_category = discord.utils.get(self.guild.categories, id=int(div_info['category_id']))
 
         # Ask confirmation
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteDiv_confirmation'].format(div_number=div_number), components=[[
@@ -800,10 +903,16 @@ class Cups(commands.Cog):
             return
         
         if interaction_deletedivconfirmation.component.id == 'button_deletediv_yes':
+            await interaction_deletedivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteDiv_success'].format(div_number=div_number))
+
+            # Delete game channels
+            #for chan in match_category.channels:
+            #    await chan.delete()
+
             # Delete div embed
             self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s AND div_number=%s", (cup_info['id'], div_number))
             div_to_delete = self.bot.cursor.fetchone()
-            signup_channel = discord.utils.get(self.guild.channels, id=int(cup_info['chan_signups_id']))
+            signup_channel = discord.utils.get(self.guild.channels, id=int(cup_info['chan_stage_id']))
             division_message = await signup_channel.fetch_message(div_to_delete['embed_id'])
             await division_message.delete()
 
@@ -820,11 +929,10 @@ class Cups(commands.Cog):
             
             for team_in_div in teams_in_div:
                 # Remove team from div
-                self.bot.cursor.execute("UPDATE Signups SET div_number = %s WHERE team_id = %s AND cup_id=%s", (None, team_in_div['id'], cup_info['id']))
+                self.bot.cursor.execute("UPDATE Signups SET div_number = %s, win = %s, draw = %s, loss = %s, points= %s WHERE team_id = %s AND cup_id=%s", (None, None, None, None, None, team_in_div['id'], cup_info['id']))
                 self.bot.conn.commit()
 
             # Notify and  log
-            await interaction_deletedivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteDiv_success'].format(div_number=div_number))
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdDeleteDiv_log'].format(div_number=div_number, cupname=cup_info['name']))
 

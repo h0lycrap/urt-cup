@@ -44,3 +44,32 @@ def maps(map_info_list, id):
         select_options.append(SelectOption(label = map_info['name'], value = i))
 
     return [Select( placeholder = "Pick a map", options = select_options, custom_id=id)]
+
+def player_played(players_team, players_played = None):
+    players_buttons_team = []
+    players_buttons_team_sublist = []
+    for player_team in players_team:
+        if players_played and player_team['id'] in players_played:
+            button_style = ButtonStyle.blue
+        else:
+            button_style = ButtonStyle.grey
+
+        if len(players_buttons_team_sublist) < 5:
+            players_buttons_team_sublist.append(Button(style=button_style, label=player_team['urt_auth'], custom_id=f"button_player_played_{player_team['player_id']}"))
+        else:
+            players_buttons_team.append(players_buttons_team_sublist)
+            players_buttons_team_sublist = [Button(style=button_style, label=player_team['urt_auth'], custom_id=f"button_player_played_{player_team['player_id']}")]
+    if len(players_buttons_team_sublist) != 0:
+        players_buttons_team.append(players_buttons_team_sublist)
+    players_buttons_team.append([
+        Button(style=ButtonStyle.green, label="Validate", custom_id=f"button_player_played_validate")
+    ])
+
+    return players_buttons_team
+
+def problems(problem_list, id): 
+    select_options = []
+    for (i, problem) in enumerate(problem_list):
+        select_options.append(SelectOption(label = f"{problem[0]} {problem[1]}", value = i))
+
+    return [Select( placeholder = "Select a problem to fix", options = select_options, custom_id=id)]

@@ -1,5 +1,6 @@
 #import discord
 from discord.ext import commands
+import discord
 import cogs.common.embeds as embeds
 import cogs.common.update as update
 import cogs.common.check as check
@@ -12,6 +13,10 @@ class Public(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.guild = bot.guilds[0]
+
+    @commands.command()
+    async def cancel(self, ctx):
+        pass
 
     @commands.command()
     async def info(self, ctx, args=None):
@@ -51,6 +56,34 @@ class Public(commands.Cog):
         await update.roster(self.bot)
         await update.signups(self.bot)
         await update.fixtures(self.bot)
+
+    @commands.command() 
+    @check.is_guild_manager()
+    async def forceupdatefixtures(self, ctx):
+        await update.fixture_cards(self.bot)
+
+    @commands.command()
+    async def notscheduled(self, ctx):
+        print('coucou')
+        # Get fixtures 
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE status IS NULL")
+        fixtures = self.bot.cursor.fetchall()
+
+        #Create embed field content
+        fixture_string = "Matches not scheduled \n\n"
+        if fixtures:
+            for fixture_info in fixtures:
+
+                # Get fixture link
+                fixture_channel = discord.utils.get(self.bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+                fixture_string += f"{fixture_channel.mention}\n"
+
+                if len(fixture_string) > 1900:
+                    await ctx.send(fixture_string)
+                    fixture_string = ""
+
+            await ctx.send(fixture_string)
 
 def setup(bot):
     bot.add_cog(Public(bot))

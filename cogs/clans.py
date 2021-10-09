@@ -33,11 +33,11 @@ class Clans(commands.Cog):
 
             # Check if user is busy
             if user.id in self.bot.users_busy:
-                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='You are currently busy with another action with the bot, finish it and click again')
+                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdErrorBusy'])
                 return
 
 
-            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='Check your dms!')
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['CheckDm'])
             await self.createclan(user)
 
         elif interaction.component.id == "button_edit_clan":
@@ -64,6 +64,12 @@ class Clans(commands.Cog):
 
             self.bot.cursor.execute("SELECT * FROM Teams WHERE tag = %s;", (clan_tag,))
             clan_to_edit = self.bot.cursor.fetchone()
+
+            # Check if the clan is signed up for a cup
+            self.bot.cursor.execute("SELECT * FROM Signups WHERE team_id = %s;", (clan_to_edit['id'],))
+            if self.bot.cursor.fetchone() and not is_admin:
+                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdEditClan_error_blocked_edit'])
+                return
 
             # Launch the action
             if interaction.component.id.startswith("button_edit_clan_addplayer"):
@@ -319,7 +325,7 @@ class Clans(commands.Cog):
                 await user.send(self.bot.quotes['cmdCreateClan_error_country'])
 
         # Create team ds role
-        team_role = await self.guild.create_role(name=tag)
+        team_role = await self.guild.create_role(name=tag, mentionable=True)
 
         # Get captain info
         self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id=%s", (user.id,))
@@ -378,6 +384,8 @@ class Clans(commands.Cog):
         # Cancel 
         if player_msg.content.strip().lower() == '!cancel':
             await user.send(self.bot.quotes['cmdAddPlayer_cancel'])
+            # Remove busy status
+            self.bot.users_busy.remove(user.id)
             return
 
         # Check if we are trying to add more players than the limit
@@ -590,6 +598,8 @@ class Clans(commands.Cog):
             # Cancel
             if country.lower() == '!cancel':
                 await user.send(self.bot.quotes['cmdUpdateFlag_cancel'])
+                # Remove busy status
+                self.bot.users_busy.remove(user.id)
                 return
 
             self.bot.cursor.execute("SELECT id FROM Countries WHERE id = %s;", (serialized_country,))

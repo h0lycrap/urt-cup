@@ -64,6 +64,7 @@ async def signups(bot):
     for cup_info in bot.cursor.fetchall():
         # Get signups channel
         signup_channel = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_signups_id']))
+        stage_channel = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_stage_id']))
 
         # Generate the embed
         embed = await embeds.signup(bot, cup_info['id'])
@@ -74,7 +75,7 @@ async def signups(bot):
         # Check if the signup are open 
         bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d", (cup_info['id'],))
 
-        if not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)):
+        if True: #not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)): # TEMPORARYYYYY
             signup_button = [Button(style=ButtonStyle.grey, disabled=True, label="Signup closed", custom_id=f"button_signup_{cup_info['id']}")]
         else:
             signup_button = [Button(style=ButtonStyle.green, label="Signup", custom_id=f"button_signup_{cup_info['id']}")]
@@ -101,12 +102,12 @@ async def signups(bot):
 
                 # Check if there is a message id stored
                 try:
-                    division_message = await signup_channel.fetch_message(division['embed_id'])
+                    division_message = await stage_channel.fetch_message(division['embed_id'])
                     await division_message.edit(embed=division_embed)
 
                 except:
                     # Send new message and store message id
-                    new_division_msg = await signup_channel.send(embed=division_embed)
+                    new_division_msg = await stage_channel.send(embed=division_embed)
                     bot.cursor.execute("UPDATE Divisions SET embed_id=%s WHERE id=%s", (str(new_division_msg.id), division['id']))
                     bot.conn.commit()
 
@@ -140,5 +141,17 @@ async def fixtures(bot):
             await calendar_message.edit(embed=calendar_embed)
         else:
             await calendar_chan.send(embed=calendar_embed)
+
+async def fixture_cards(bot):
+    # Get all fixtures
+    bot.cursor.execute("SELECT * FROM Fixtures;")
+    for fixture_info in bot.cursor.fetchall():
+        # Get channel
+        channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+        # Update embed
+        embed_message = await channel.fetch_message(fixture_info['embed_id'])
+        if embed_message:
+            fixture_embed = await embeds.fixture(bot, fixture_id=fixture_info['id'])
+            await embed_message.edit(embed=fixture_embed)
 
         

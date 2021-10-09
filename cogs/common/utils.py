@@ -59,3 +59,9 @@ def ping_db(bot):
     except mariadb.DatabaseError:
         print("The database has gone away -- reconnecting.")
         bot.conn.reconnect()
+
+def timezone_link(date):
+    fixture_schedule_elems = date.split(" ")
+    fixture_date_elems = fixture_schedule_elems[0].split('-')
+    fixture_time_elems = fixture_schedule_elems[1].split(':')
+    return f"https://www.timeanddate.com/worldclock/fixedtime.html?&iso={fixture_date_elems[0]}{fixture_date_elems[1]}{fixture_date_elems[2]}T{fixture_time_elems[0]}{fixture_time_elems[1]}"

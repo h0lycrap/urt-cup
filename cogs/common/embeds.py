@@ -324,8 +324,8 @@ async def division(bot, cup_id, div_number):
     bot.cursor.execute("SELECT * FROM Cups WHERE id=%d", (cup_id,))
 
     # Fetch signed up teams
-    bot.cursor.execute("SELECT team_id FROM Signups WHERE cup_id=%d AND div_number=%s", (cup_id, div_number))
-    team_ids = bot.cursor.fetchall()
+    bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d AND div_number=%s", (cup_id, div_number))
+    team_signup_infos = bot.cursor.fetchall()
 
     tag_string = ""
     score_string = ""
@@ -334,10 +334,23 @@ async def division(bot, cup_id, div_number):
     roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
 
     #Create embed field content
-    if team_ids:
-        for i, team_id in enumerate(team_ids):
+    if team_signup_infos:
+        # Sort by poitns
+        for i, team_signup_info in enumerate(team_signup_infos):
+            if not team_signup_info['points']:
+                team_signup_infos[i]['points'] = 0
+            if not team_signup_info['win']:
+                team_signup_infos[i]['win'] = 0
+            if not team_signup_info['draw']:
+                team_signup_infos[i]['draw'] = 0
+            if not team_signup_info['loss']:
+                team_signup_infos[i]['loss'] = 0
+        
+        team_signup_infos = sorted(team_signup_infos, key=lambda k: k['points'], reverse=True)
+
+        for i, team_signup_info in enumerate(team_signup_infos):
             # Get team info
-            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_id['team_id'],))
+            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_signup_info['team_id'],))
             team_info = bot.cursor.fetchone()
             team_name = utils.prevent_discord_formating(team_info['name'])
             team_flag = flag.flagize(team_info['country'])
@@ -349,8 +362,9 @@ async def division(bot, cup_id, div_number):
             roster_link = roster_message.jump_url
 
             tag_string += f"``{index_str.ljust(3)}`` {team_flag} {team_tag_str}\n" #[{team_tag_str}]({roster_link})\n"
-            score_string += "``0``\n"
-            wdl_string += "``8/5/2``\n"
+
+            score_string += f"\u200b \u200b \u200b \u200b \u200b ``{team_signup_info['points']}``\n"
+            wdl_string += f"``{team_signup_info['win']}``/``{team_signup_info['draw']}``/``{team_signup_info['loss']}``\n"
         
     else:
         score_string = "\u200b"
@@ -360,9 +374,12 @@ async def division(bot, cup_id, div_number):
 
     # Create the embed
     embed = discord.Embed(title=f"Division {div_number}", color=0xFFD700)
+    # TEMPORARY JUST FOR QUALIFIERS TODO 
+    #embed = discord.Embed(title=f"Qualifiers", color=0xFFD700)
     embed.add_field(name="Team", value= tag_string, inline=True)
     embed.add_field(name="W/D/L", value= wdl_string, inline=True)
     embed.add_field(name="Points", value= score_string, inline=True)
+    embed.description = "Detailed ranking: [Click here](https://ggle.io/4JC0)"
 
     return embed
 
@@ -379,7 +396,7 @@ def map_list(map_list, title):
     return embed
 
 
-def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, format=None, status=None):
+async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, format=None, status=None):
     # Get fixture info
     bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%s", (fixture_id,))
     fixture_info = bot.cursor.fetchone()
@@ -388,6 +405,8 @@ def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, forma
         team2_id = fixture_info['team2']
         date = fixture_info['date']
         status = fixture_info['status']
+        format = fixture_info['format']
+        fixture_id = fixture_info['id']
 
 
     # Get teams info
@@ -396,13 +415,33 @@ def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, forma
     bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team2_id,))
     team2 = bot.cursor.fetchone()
 
+    # Get maps info
+    bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id = m.id WHERE f.fixture_id = %s", (fixture_id,))
+    maps = bot.cursor.fetchall()
+
+    ts_map_string = ""
+    ctf_map_string = ""
+    if maps:
+        for map_info in maps:
+            if map_info['gamemode'] == "TS":
+                ts_map_string += f"{map_info['name']}\n"
+            else:
+                ctf_map_string += f"{map_info['name']}\n"
+    
+    if len(ts_map_string) == 0:
+        ts_map_string = "-"
+    if len(ctf_map_string) == 0:
+        ctf_map_string = "-"
+
+
+
     # Get date and time if set yet
     if date:
         fixture_schedule_elems = date.split(" ")
         fixture_date_elems = fixture_schedule_elems[0].split('-')
         fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}/{fixture_date_elems[0]}"
         fixture_time_elems = fixture_schedule_elems[1].split(':')
-        fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
+        fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]} [Convert]({utils.timezone_link(date)})"
     else:
         fixture_date = "-"
         fixture_time = "-"
@@ -412,19 +451,25 @@ def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, forma
         status_str = "Scheduled"
     elif status and int(status) == 2:
         status_str = "In progress"
-    elif status and int(status) == 3:
+    elif status and int(status) >= 3:
         status_str = "Finished"
     else:
         status_str = "Not scheduled"
 
+    roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
+    roster_message1 = await roster_channel.fetch_message(team1['roster_message_id'])
+    roster_message2 = await roster_channel.fetch_message(team2['roster_message_id'])
 
-    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= format)
+
+    #team_string = f"{team_flag} [{utils.prevent_discord_formating(team_tag)}]({roster_message.jump_url})\n"
+
+    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= f"**Format: **{format} \u200b \u200b **|** \u200b \u200b **Rosters**: [{utils.prevent_discord_formating(team1['tag'])}]({roster_message1.jump_url}) \u200b \u200b [{utils.prevent_discord_formating(team2['tag'])}]({roster_message2.jump_url})")
     embed.add_field(name=":pencil: Status", value= status_str, inline=True)
-    embed.add_field(name=":calendar_spiral: Date (DD/MM/YYYY)", value= fixture_date, inline=True)
-    embed.add_field(name=":alarm_clock: Time (CET)", value= fixture_time, inline=True)
-    embed.add_field(name=":map: Map TS", value= f"-", inline=True)
-    embed.add_field(name=":map: Map CTF", value= f"-", inline=True)
-    embed.add_field(name=":link: Demo and MOSS", value= f"https://dev.urt.li", inline=True)
+    embed.add_field(name=":calendar_spiral: Date (D/M/Y)", value= fixture_date, inline=True)
+    embed.add_field(name=":alarm_clock: Time (UTC)", value= fixture_time, inline=True)
+    embed.add_field(name=":map: Map TS", value= ts_map_string, inline=True)
+    embed.add_field(name=":map: Map CTF", value= ctf_map_string, inline=True)
+    embed.add_field(name=":link: Demo and MOSS", value= f"https://urt.li/#flawless", inline=True)
 
     return embed
 
@@ -436,6 +481,7 @@ async def match_index(bot, cup_id, channel):
     #Create embed field content
     fixture_string = "Matches not scheduled \n\n"
     if fixtures:
+        '''
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
             
@@ -453,28 +499,11 @@ async def match_index(bot, cup_id, channel):
                 fixture_string = ""
 
         await channel.send(fixture_string)
+        '''
+    
+        
 
-        fixture_string = "~ \n\nMatches scheduled but not played \n\n"
-
-        for i, fixture_info in enumerate(fixtures):
-            index_str = str(i + 1) + "."
-
-            # Get status
-            if fixture_info['status'] != 1:
-                continue
-
-            # Get fixture link
-            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
-
-            fixture_string += f"{fixture_channel.mention}\n"
-
-            if len(fixture_string) > 1900:
-                await channel.send(fixture_string)
-                fixture_string = ""
-
-        await channel.send(fixture_string)
-
-        fixture_string = "~ \n\nMatches in progress \n\n"
+        fixture_string = "**Scores need to be entered**\n\n"
 
         for i, fixture_info in enumerate(fixtures):
             index_str = str(i + 1) + "."
@@ -493,6 +522,57 @@ async def match_index(bot, cup_id, channel):
                 fixture_string = ""
 
         await channel.send(fixture_string)
+
+        fixture_string = "~ \n\n**Schedule needs to be forced**\n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != None or not fixture_info['date_last_proposal']:
+                continue
+
+            # Get the number of hours since the last proposal was sent 
+            gamedate = datetime.date.fromisoformat(fixture_info['date_last_proposal'].split()[0])
+            gametime = datetime.time.fromisoformat(fixture_info['date_last_proposal'].split()[1])
+            gameschedule = datetime.datetime.combine(gamedate, gametime)
+
+            deltatime = datetime.datetime.now() - gameschedule
+
+            if not deltatime.days >= 5:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\n**Scheduled but not played** (might need a Streamer)\n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != 1:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+        '''
 
         fixture_string = "~ \n\nMatches finished \n\n"
 
@@ -514,6 +594,48 @@ async def match_index(bot, cup_id, channel):
 
         await channel.send(fixture_string)
 
+        
+        fixture_string = "~ \n\nMatches finished with missing Moss or demo Files from more than 50h \n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != 4:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\nMatches archived \n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != 5:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+        '''
+
 
 def calendar(bot, cup_info):
     # Get fixtures 
@@ -523,6 +645,9 @@ def calendar(bot, cup_info):
     fixture_list = []
     date_list = []
     for fixture in fixtures:
+        if fixture['status'] and int(fixture['status']) >= 3:
+            continue
+
         TBD_date = datetime.datetime(2040, 1, 1)
 
         # Get Team 1 info 
@@ -533,7 +658,7 @@ def calendar(bot, cup_info):
         bot.cursor.execute("SELECT * FROM Teams WHERE id=%d", (fixture['team2'],))
         team2 = bot.cursor.fetchone()
 
-        fixture_list.append([flag.flagize(team1['country']), team1['tag'], flag.flagize(team2['country']), team2['tag']])
+        fixture_list.append([flag.flagize(team1['country']), utils.prevent_discord_formating(team1['tag']), flag.flagize(team2['country']), utils.prevent_discord_formating(team2['tag'])])
 
         
 
@@ -553,8 +678,8 @@ def calendar(bot, cup_info):
     date_str = ""
     modules = []
     for i in sorted_index:
-        fixture_str1 += f"{fixture_list[i][0]}  ``{fixture_list[i][1]}``\n \n" 
-        fixture_str2 += f"{fixture_list[i][2]}  ``{fixture_list[i][3]}``\n \n" 
+        fixture_str1 += f"{fixture_list[i][0]}  {fixture_list[i][1]}\n \n" 
+        fixture_str2 += f"{fixture_list[i][2]}  {fixture_list[i][3]}\n \n" 
 
         if date_list[i] != TBD_date:
             fixture_schedule_elems = str(date_list[i]).split(" ")
@@ -562,9 +687,9 @@ def calendar(bot, cup_info):
             fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
             fixture_time_elems = fixture_schedule_elems[1].split(':')
             fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
-            date_str += f"``{fixture_date}  -  {fixture_time}`` \n \n"
+            date_str += f"{fixture_date}  -  {fixture_time} \n \n"
         else:
-            date_str += "``--/--  -  --:--`` \n \n"
+            date_str += "--/--  -  --:-- \n \n"
             
 
         # Create a new module if the limit is reached
@@ -587,7 +712,7 @@ def calendar(bot, cup_info):
 
     # Create the embed
     embed = discord.Embed(title=f":calendar_spiral: Calendar", color=13568619)
-    title1 = "\u200b \u200b Date *(CET)* \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b\n \u200b"
+    title1 = "\u200b \u200b Date *(UTC)* \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b\n \u200b"
     title2 = "\u200b \u200b \u200bTeam 1\u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b   VS  \u200b \u200b \u200b \n \u200b"
     title3 = "\u200b \u200b \u200bTeam 2 \n \u200b"
     if len(modules) == 0:
@@ -614,3 +739,32 @@ def calendar(bot, cup_info):
     #embed.set_footer(text=f"Total: {len(sorted_teams)} Teams, {len(total_players)} Players")
 
     return embed
+
+def results(bot, fixture_info, match_type):
+
+    # Format date
+    fixture_schedule_elems = str(fixture_info['date']).split(" ")
+    fixture_date_elems = fixture_schedule_elems[0].split('-')
+    fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
+    fixture_time_elems = fixture_schedule_elems[1].split(':')
+    fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
+    date_str = f"{fixture_date} - {fixture_time}"
+
+    # Get teams info
+    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+    team1 = bot.cursor.fetchone()
+    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+    team2 = bot.cursor.fetchone()
+
+    # Get maps info
+    bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id = m.id WHERE f.fixture_id = %s", (fixture_info['id'],))
+    maps = bot.cursor.fetchall()
+
+    if fixture_info['format'] == "BO2":
+
+        result_str = f"**[{match_type}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : **{maps[0]['name']}** *({maps[0]['gamemode']})*  /  **{maps[1]['name']}** *({maps[1]['gamemode']})*    **|**    :dart: : **{maps[0]['team1_score']}-{maps[0]['team2_score']}**  /  **{maps[1]['team1_score']}-{maps[1]['team2_score']}**"
+
+        return result_str
+
+    else: # TODO IMPLEMENT BO3/5...
+        return "."

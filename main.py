@@ -58,9 +58,11 @@ bot.role_captains_id = int(os.getenv('role_captains_id'))
 bot.role_flawless_crew_id = int(os.getenv('role_flawless_crew_id'))
 bot.role_cup_supervisor_id = int(os.getenv('role_cup_supervisor_id'))
 bot.role_moderator_id = int(os.getenv('role_moderator_id'))
+bot.role_streamer_id = int(os.getenv('role_streamer_id'))
 bot.role_bot_id = int(os.getenv('role_bot_id'))
 
 bot.channel_log_id = int(os.getenv('channel_log_id'))
+bot.channel_demolog_id = int(os.getenv('channel_demolog_id'))
 bot.channel_roster_id = int(os.getenv('channel_roster_id'))
 bot.channel_panel_id = int(os.getenv('channel_panel_id'))
 
@@ -69,6 +71,9 @@ bot.category_match_schedule_id = int(os.getenv('category_match_schedule_id'))
 bot.max_players_per_team = 8
 bot.users_busy = []
 bot.fixtures_busy = []
+
+bot.urtli_id = os.getenv('urtli_id')
+bot.urtli_pass = os.getenv('urtli_pass')
 
 @bot.event
 async def on_member_join(member):
@@ -114,7 +119,7 @@ async def on_ready():
 
 
     print("Bot online")
-    welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
+    #welcome_chan = discord.utils.get(bot.guilds[0].channels, name="welcome")
     #await welcome_chan.send(content=":interrobang:  **Invite your mates :** \n             Feel free to use this permanent link : https://discord.gg/DBJjn3erzz")
     #await welcome_chan.send(content="\u200b", components=[Button(style=ButtonStyle.green, label="Click here to register", custom_id="button_register")])
 
