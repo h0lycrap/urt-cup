@@ -772,6 +772,9 @@ class Cups(commands.Cog):
             self.bot.cursor.execute("UPDATE Signups SET div_number = %s WHERE team_id = %s AND cup_id=%s", (div_number, team_to_add['id'], cup_info['id']))
             self.bot.conn.commit()
 
+            ftw_client: FTWClient = self.bot.ftw
+            await ftw_client.cup_set_team_division(cup_info['ftw_cup_id'], team_to_add['ftw_team_id'], div_number)
+
             # Notify and  log
             await interaction_addteamdivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddTeamDiv_success'].format(teamname=team_to_add['name'], div_number=div_number))
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
@@ -808,6 +811,9 @@ class Cups(commands.Cog):
             # Remove team from div
             self.bot.cursor.execute("UPDATE Signups SET div_number = %s WHERE team_id = %s AND cup_id=%s", (None, team_to_remove['id'], cup_info['id']))
             self.bot.conn.commit()
+
+            ftw_client: FTWClient = self.bot.ftw
+            await ftw_client.cup_set_team_division(cup_info['ftw_cup_id'], team_to_remove['ftw_team_id'], None)
 
             # Notify and  log
             await interaction_addteamdivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdRemoveTeamDiv_success'].format(teamname=team_to_remove['name'], div_number=div_number))

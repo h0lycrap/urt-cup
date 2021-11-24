@@ -190,6 +190,7 @@ class Account(commands.Cog):
         self.bot.conn.commit()
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.user_create(user.id, auth, name)
+
         await user.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
 

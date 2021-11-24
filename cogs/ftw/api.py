@@ -77,7 +77,7 @@ class FTWClient:
                     print(f"Failed ({resp.status}) to create team", request_body)
                     print(await resp.json())
 
-    async def cup_team_division(self, cup_id: int, team_id: int, division: int):
+    async def cup_set_team_division(self, cup_id: int, team_id: int, division: int):
         request_body = {
             'cup_id': cup_id,
             'team_id': team_id,
