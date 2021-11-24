@@ -10,6 +10,10 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component, interaction
 
+from cogs.ftw.api import FTWClient
+from cogs.ftw.enum import UserTeamRoles
+
+
 class Clans(commands.Cog):
 
     def __init__(self, bot):
@@ -332,7 +336,13 @@ class Clans(commands.Cog):
         captain = self.bot.cursor.fetchone()
 
         # Add team to DB
-        self.bot.cursor.execute("INSERT INTO Teams(name, tag, country, captain, role_id) VALUES (%s, %s, %s, %s, %s) ;", (teamname, tag, country, captain['id'], team_role.id))
+        ftw_client: FTWClient = self.bot.ftw
+        ftw_team_id = await ftw_client.team_create(user.id, teamname, tag)
+
+        self.bot.cursor.execute(
+            "INSERT INTO Teams(name, tag, country, captain, role_id, ftw_team_id) VALUES (%s, %s, %s, %s, %s, %s) ;",
+            (teamname, tag, country, captain['id'], team_role.id, ftw_team_id)
+        )
         self.bot.conn.commit()
         team_id = self.bot.cursor.lastrowid
 
@@ -342,6 +352,9 @@ class Clans(commands.Cog):
         await captain_ds.add_roles(captain_role, team_role)
         self.bot.cursor.execute("INSERT INTO Roster(team_id, player_id, accepted) VALUES (%s, %s, %d) ;", (team_id, captain['id'], 2))
         self.bot.conn.commit()
+
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.team_add_user(ftw_team_id, captain['id'], UserTeamRoles.leader)
 
         await user.send(self.bot.quotes['cmdCreateClan_success'])
 
@@ -417,7 +430,10 @@ class Clans(commands.Cog):
 
             # Add player to roster
             self.bot.cursor.execute("INSERT INTO Roster(team_id, player_id) VALUES (%s, %s) ;", (team_toedit['id'], player_toadd['id']))
-            self.bot.conn.commit() 
+            self.bot.conn.commit()
+
+            ftw_client: FTWClient = self.bot.ftw
+            await ftw_client.team_add_user(team_toedit['ftw_team_id'], player_toadd['id'], UserTeamRoles.invited)
 
             # Invite each player
             if not is_admin:

@@ -8,6 +8,7 @@ import json
 import asyncio
 import cogs.common.update as update
 import cogs.common.check as check
+from cogs.ftw.api import FTWClient
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -27,6 +28,7 @@ bot.conn = mariadb.connect(
         database=os.getenv('DBNAME')
     )
 bot.cursor = bot.conn.cursor(dictionary=True)
+bot.ftw = FTWClient()
 
 
 # Cogs cmds 

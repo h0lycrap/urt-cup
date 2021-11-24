@@ -65,3 +65,10 @@ def timezone_link(date):
     fixture_date_elems = fixture_schedule_elems[0].split('-')
     fixture_time_elems = fixture_schedule_elems[1].split(':')
     return f"https://www.timeanddate.com/worldclock/fixedtime.html?&iso={fixture_date_elems[0]}{fixture_date_elems[1]}{fixture_date_elems[2]}T{fixture_time_elems[0]}{fixture_time_elems[1]}"
+
+def create_abbreviation(words: str) -> str:
+    abbreviation = ""
+    for word in words.split():
+        abbreviation += word[0]
+
+    return abbreviation.upper()

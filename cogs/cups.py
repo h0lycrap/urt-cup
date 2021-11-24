@@ -9,6 +9,9 @@ import cogs.common.dropmenus as dropmenus
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
+from cogs.ftw.api import FTWClient
+
+
 class Cups(commands.Cog):
 
     def __init__(self, bot):
@@ -254,7 +257,13 @@ class Cups(commands.Cog):
         await chan_match_index.set_permissions(role_moderator, view_channel=True)
         await chan_match_index.set_permissions(role_streamer, view_channel=True)
 
-        self.bot.cursor.execute("INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster, chan_results_id) VALUES (%s, %d,  %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster, chan_results.id))
+        ftw_client: FTWClient = self.bot.ftw
+        ftw_cup_id = await ftw_client.cup_create(name, utils.create_abbreviation(name), mini_roster, signup_start_date, signup_end_date)
+
+        self.bot.cursor.execute(
+            "INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster, chan_results_id, ftw_cup_id) "
+            "VALUES (%s, %d,  %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster, chan_results.id, ftw_cup_id))
         cup_id = self.bot.cursor.lastrowid
         self.bot.conn.commit()
 
@@ -299,6 +308,10 @@ class Cups(commands.Cog):
         # Signup the clan 
         self.bot.cursor.execute("INSERT INTO Signups (cup_id, team_id) VALUES (%d, %s);", (cup['id'], team['id']))
         self.bot.conn.commit()
+
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.team_join_cup(team['ftw_team_id'], cup['ftw_cup_id'])
+
         await ctx.message.delete()
         await ctx.send(self.bot.quotes['cmdForceSignup_success'], delete_after=2)
         
@@ -685,10 +698,14 @@ class Cups(commands.Cog):
             # Signup the clan and notify
             self.bot.cursor.execute("INSERT INTO Signups (cup_id, team_id) VALUES (%d, %s);", (cup_info['id'], clan_tosignup['id']))
             self.bot.conn.commit()
+
+            ftw_client: FTWClient = self.bot.ftw
+            await ftw_client.team_join_cup(clan_tosignup['ftw_team_id'], cup_info['ftw_cup_id'])
+
             await interaction_signupteamconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSignup_success'].format(teamname=clan_tosignup['name'], cupname=cup_info['name']))
 
             # Update log
-            log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+            log_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdSignup_log'].format(teamname=clan_tosignup['name'], cupname=cup_info['name']))
 
     async def create_division(self, cup_info, user, user_info, is_admin, interaction):

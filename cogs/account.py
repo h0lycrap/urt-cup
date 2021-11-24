@@ -9,6 +9,9 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
 
+from cogs.ftw.api import FTWClient
+
+
 class Account(commands.Cog):
 
     def __init__(self, bot):
@@ -100,6 +103,8 @@ class Account(commands.Cog):
         # Add user to DB and remove unregistered role
         self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
         self.bot.conn.commit()
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.user_create(user.id, auth, name)
         await ctx.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
 
@@ -183,6 +188,8 @@ class Account(commands.Cog):
         # Add user to DB and remove unregistered role
         self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
         self.bot.conn.commit()
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.user_create(user.id, auth, name)
         await user.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
 
@@ -190,7 +197,7 @@ class Account(commands.Cog):
         self.bot.users_busy.remove(user.id)
 
         # Print on the log channel
-        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        log_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         embed = embeds.player(self.bot, auth)
         await log_channel.send(content=self.bot.quotes['cmdRegister_log'], embed=embed)
 
