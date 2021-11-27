@@ -35,7 +35,8 @@ class FTWClient:
                     cup_id = resp_body['cup_id']
                     return cup_id
 
-    async def user_create(self, discord_id: int, discord_username: str, urt_auth: str):
+    # Creates a user if one does not exist, otherwise updates based on existing discord_id
+    async def user_create_or_update(self, discord_id: int, discord_username: str, urt_auth: str):
         request_body = {
             'discord_id': discord_id,
             'discord_username': discord_username,
@@ -90,7 +91,7 @@ class FTWClient:
                     print(f"Failed ({resp.status}) to create team", request_body)
                     print(await resp.json())
 
-    async def team_add_user(self, team_id: int, discord_id: int, role: UserTeamRoles):
+    async def team_add_user_or_update_role(self, team_id: int, discord_id: int, role: UserTeamRoles):
         request_body = {
             'team_id': team_id,
             'discord_id': discord_id,

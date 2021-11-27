@@ -10,6 +10,7 @@ import flag
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
 
 from cogs.ftw.api import FTWClient
+from cogs.ftw.enum import UserTeamRoles
 
 
 class Account(commands.Cog):
@@ -104,7 +105,7 @@ class Account(commands.Cog):
         self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
         self.bot.conn.commit()
         ftw_client: FTWClient = self.bot.ftw
-        await ftw_client.user_create(user.id, auth, name)
+        await ftw_client.user_create_or_update(user.id, auth, name)
         await ctx.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
 
@@ -189,7 +190,7 @@ class Account(commands.Cog):
         self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
         self.bot.conn.commit()
         ftw_client: FTWClient = self.bot.ftw
-        await ftw_client.user_create(user.id, auth, name)
+        await ftw_client.user_create_or_update(user.id, auth, name)
 
         await user.send(self.bot.quotes['cmdRegister_success'])
         await user.remove_roles(discord.utils.get(self.guild.roles, id=self.bot.role_unregistered_id))
@@ -277,6 +278,9 @@ class Account(commands.Cog):
         self.bot.conn.commit()
         self.bot.async_loop.create_task(update.roster(self.bot))
 
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.user_create_or_update(player_toedit['discord_id'], playername, player_toedit['urt_auth'])
+
         await user.send(self.bot.quotes['cmdEditPlayer_update_name_success'])
 
         # Print on the log channel
@@ -333,6 +337,9 @@ class Account(commands.Cog):
         self.bot.cursor.execute("UPDATE Users SET urt_auth=%s WHERE id=%s", (auth, player_toedit['id']))
         self.bot.conn.commit()
         self.bot.async_loop.create_task(update.roster(self.bot))
+
+        ftw_client: FTWClient = self.bot.ftw
+        await ftw_client.user_create_or_update(player_toedit['discord_id'], player_toedit['ingame_name'], auth)
 
         await user.send(self.bot.quotes['cmdEditPlayer_update_auth_success'])
 
@@ -414,6 +421,9 @@ class Account(commands.Cog):
                 if new_cap_id:
                     self.bot.cursor.execute("UPDATE Roster SET accepted=2 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], new_cap_id['player_id']))
                     self.bot.conn.commit()
+
+                    ftw_client: FTWClient = self.bot.ftw
+                    await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_cap_id['discord_id'], UserTeamRoles.leader)
 
                     self.bot.cursor.execute("UPDATE Teams SET captain=%s WHERE tag = %s ;", (new_cap_id['player_id'], team_toedit['tag']))
                     self.bot.conn.commit()
