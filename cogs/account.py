@@ -9,8 +9,7 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
 
-from cogs.ftw.api import FTWClient
-from cogs.ftw.enum import UserTeamRoles
+from ftwgl import FTWClient, UserTeamRole
 
 
 class Account(commands.Cog):
@@ -423,7 +422,7 @@ class Account(commands.Cog):
                     self.bot.conn.commit()
 
                     ftw_client: FTWClient = self.bot.ftw
-                    await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_cap_id['discord_id'], UserTeamRoles.leader)
+                    await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_cap_id['discord_id'], UserTeamRole.leader)
 
                     self.bot.cursor.execute("UPDATE Teams SET captain=%s WHERE tag = %s ;", (new_cap_id['player_id'], team_toedit['tag']))
                     self.bot.conn.commit()

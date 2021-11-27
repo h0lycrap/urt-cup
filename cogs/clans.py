@@ -10,8 +10,7 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component, interaction
 
-from cogs.ftw.api import FTWClient
-from cogs.ftw.enum import UserTeamRoles
+from ftwgl import FTWClient, UserTeamRole
 
 
 class Clans(commands.Cog):
@@ -148,7 +147,7 @@ class Clans(commands.Cog):
                 self.bot.conn.commit()
 
                 ftw_client: FTWClient = self.bot.ftw
-                await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], user_info['discord_id'], UserTeamRoles.member)
+                await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], user_info['discord_id'], UserTeamRole.member)
 
                 await captain.send(self.bot.quotes['cmdAddPlayer_accepted_cap'].format(name=user_info['ingame_name'], teamname=team_toedit['name']))
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, ephemeral=False, content=self.bot.quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit['name']))
@@ -357,7 +356,7 @@ class Clans(commands.Cog):
         self.bot.conn.commit()
 
         ftw_client: FTWClient = self.bot.ftw
-        await ftw_client.team_add_user_or_update_role(ftw_team_id, captain['discord_id'], UserTeamRoles.leader)
+        await ftw_client.team_add_user_or_update_role(ftw_team_id, captain['discord_id'], UserTeamRole.leader)
 
         await user.send(self.bot.quotes['cmdCreateClan_success'])
 
@@ -436,7 +435,7 @@ class Clans(commands.Cog):
             self.bot.conn.commit()
 
             ftw_client: FTWClient = self.bot.ftw
-            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRoles.invited)
+            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRole.invited)
 
             # Invite each player
             if not is_admin:
@@ -460,7 +459,7 @@ class Clans(commands.Cog):
                 self.bot.conn.commit()
 
                 ftw_client: FTWClient = self.bot.ftw
-                await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRoles.member)
+                await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRole.member)
 
                 await user.send(self.bot.quotes['cmdEditClan_admin_accepted_cap'].format(name=player_toadd['ingame_name'], teamname=team_toedit['name']))
 
@@ -545,7 +544,7 @@ class Clans(commands.Cog):
             self.bot.conn.commit()
 
             ftw_client: FTWClient = self.bot.ftw
-            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRoles.inactive)
+            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRole.inactive)
 
             await interaction_addinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddInactive_success'].format(name=player_addinactive['ingame_name']))
 
@@ -590,7 +589,7 @@ class Clans(commands.Cog):
             self.bot.conn.commit()
 
             ftw_client: FTWClient = self.bot.ftw
-            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRoles.member)
+            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRole.member)
 
             await interaction_removeinactiveconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdRemoveInactive_success'].format(name=player_addinactive['ingame_name']))
 
@@ -717,7 +716,7 @@ class Clans(commands.Cog):
             self.bot.conn.commit()
 
             ftw_client: FTWClient = self.bot.ftw
-            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRoles.leader)
+            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRole.leader)
 
             self.bot.cursor.execute("UPDATE Teams SET captain=%s WHERE tag = %s ;", (new_captain['id'], team_toedit['tag']))
             self.bot.conn.commit()
@@ -729,7 +728,7 @@ class Clans(commands.Cog):
             prev_captain = discord.utils.get(self.guild.members, id=int(prev_captain_info['discord_id']))
             self.bot.cursor.execute("UPDATE Roster SET accepted=1 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], team_toedit['captain']))
             self.bot.conn.commit()
-            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRoles.member)
+            await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRole.member)
 
             # Remove captain discord role for previous captain if not captain of any clan
             captain_role = discord.utils.get(self.guild.roles, id=self.bot.role_captains_id)

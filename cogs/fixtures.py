@@ -10,7 +10,7 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
-from cogs.ftw.api import FTWClient
+from ftwgl import FTWClient
 
 
 class Fixtures(commands.Cog):
