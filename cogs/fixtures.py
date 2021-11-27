@@ -21,8 +21,7 @@ class Fixtures(commands.Cog):
         user = discord.utils.get(self.guild.members, id=interaction.user.id)
 
         if interaction.component.id == "button_create_fixture":
-            #await self.create_fixture(interaction) QUARANTINED
-            pass
+            await self.create_fixture(interaction)
         elif interaction.component.id.startswith("button_create_fixtures_div"):
             await self.create_fixtures_division(interaction)
         elif interaction.component.id == "button_edit_fixture":
@@ -61,7 +60,6 @@ class Fixtures(commands.Cog):
         elif interaction.component.id.startswith("button_change_map_fixture_admin"):
             await self.change_map_fixture_admin(interaction)
 
-    # QUARANTINED FOR NOW WILL BE ACTIVE AGAIN WHEN PLAYOFFS WILL BE IMPLEMENTED
     async def create_fixture(self, interaction):
         # Get which cup this is from 
         self.bot.cursor.execute("SELECT * FROM Cups WHERE chan_admin_id=%s;", (interaction.message.channel.id,))
@@ -71,9 +69,9 @@ class Fixtures(commands.Cog):
         self.bot.cursor.execute("SELECT * FROM Signups WHERE cup_id = %s;", (cup_toedit['id'],))
         teams_signed_up  = self.bot.cursor.fetchall()
 
-        # Get divisions
-        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id = %s;", (cup_toedit['id'],))
-        divisions  = self.bot.cursor.fetchall()
+        # Get division 1 by default
+        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id = %s AND div_number=1;", (cup_toedit['id'],))
+        div_info  = self.bot.cursor.fetchone()
 
         if len(teams_signed_up) < 2:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No team signed up for this cup")
@@ -101,14 +99,23 @@ class Fixtures(commands.Cog):
         team2 = clan_info_list[int(interaction_team2.component[0].value)]
 
         # Select format
-        formats = ['BO2'] #['BO1', 'BO2', 'BO3', 'BO5', 'BO7']
+        formats = ['BO2', 'BO3', 'BO5']
         droplist_format = dropmenus.formats(formats, "Select a format", "dropmenu_format")
         await interaction_team2.respond(type=InteractionType.ChannelMessageWithSource, content="What is the format of this game?", components=droplist_format)
         interaction_format = await self.bot.wait_for("select_option", check = lambda i: i.user.id == interaction.author.id and i.parent_component.id == "dropmenu_format")
         fixture_format = formats[int(interaction_format.component[0].value)]
 
+        # Select title
+        titles = ['Quarter finals', 'Semi Final', 'Consolation Final', 'Final', 'Other']
+        droplist_title= dropmenus.formats(titles, "Select a title", "dropmenu_title")
+        await interaction_format.respond(type=InteractionType.ChannelMessageWithSource, content="What is the title of this game?", components=droplist_title)
+        interaction_title = await self.bot.wait_for("select_option", check = lambda i: i.user.id == interaction.author.id and i.parent_component.id == "dropmenu_title")
+        fixture_title = titles[int(interaction_title.component[0].value)]
+
+        await interaction_title.respond(type=InteractionType.ChannelMessageWithSource, content="Creating fixture")
+
         # Create the fixture
-        await self.create_fixture_fun(team1, team2, cup_toedit, fixture_format)
+        await self.create_fixture_fun(team1, team2, cup_toedit, fixture_format, div_info, fixture_title)
 
         # Update fixtures
         await update.fixtures(self.bot)
@@ -227,6 +234,7 @@ class Fixtures(commands.Cog):
         role_team1 = discord.utils.get(self.guild.roles, id=int(team1['role_id'])) 
         role_team2 = discord.utils.get(self.guild.roles, id=int(team2['role_id'])) 
 
+        '''
         # Set the permissions
         overwrites = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -237,6 +245,8 @@ class Fixtures(commands.Cog):
             role_moderator: discord.PermissionOverwrite(read_messages=True),
             role_streamer: discord.PermissionOverwrite(read_messages=True)
         }
+        '''
+        overwrites = {} ##########################
 
         # Create text channel 
         fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category) 
@@ -252,12 +262,8 @@ class Fixtures(commands.Cog):
         # Send fixture card
         fixture_id = self.bot.cursor.lastrowid
         
-        embed = await embeds.fixture(bot=self.bot, team1_id=team1['id'], team2_id=team2['id'], date=None, format=fixture_format)
-        fixture_card = await fixture_channel.send(embed=embed, components=[[
-            Button(style=ButtonStyle.blue, label="Schedule game", custom_id=f"button_fixture_schedule"),
-            Button(style=ButtonStyle.blue, label="Start pick & ban", custom_id=f"button_fixture_startpickban"),
-            Button(style=ButtonStyle.grey, label="Admin Panel", custom_id=f"button_edit_fixture")
-            ]])
+        embed, components = await embeds.fixture(bot=self.bot, team1_id=team1['id'], team2_id=team2['id'], date=None, format=fixture_format)
+        fixture_card = await fixture_channel.send(embed=embed, components=components)
 
         self.bot.cursor.execute("UPDATE Fixtures SET embed_id=%s WHERE id = %d", (str(fixture_card.id), fixture_id))
         self.bot.conn.commit()
@@ -274,12 +280,8 @@ class Fixtures(commands.Cog):
             return
 
         # Send card
-        embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await ctx.send(embed=embed, components=[[
-            Button(style=ButtonStyle.blue, label="Schedule game", custom_id=f"button_fixture_schedule"),
-            Button(style=ButtonStyle.blue, label="Start pick & ban", custom_id=f"button_fixture_startpickban"),
-            Button(style=ButtonStyle.grey, label="Admin Panel", custom_id=f"button_edit_fixture")
-            ]])
+        embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await ctx.send(embed=embed, components=components)
 
     async def delete_fixture(self, interaction):
         # Get which feature to delete 
@@ -1189,15 +1191,15 @@ class Fixtures(commands.Cog):
             self.bot.cursor.execute("UPDATE Fixtures set status = 3 WHERE id=%s", (fixture_info['id'],))
             self.bot.conn.commit()
 
-        # Update embed
-        embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
-
         # Refresh all fixture status
         serverLoopCog = self.bot.get_cog('ServerLoop')
         await serverLoopCog.check_upload_status()
         await serverLoopCog.refresh_all_fixture_status()
+
+        # Update embed
+        embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
+        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed)
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)

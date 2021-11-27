@@ -96,7 +96,10 @@ class ServerLoop(commands.Cog):
 
         # Get div number
         fixture_channel = discord.utils.get(self.guild.channels, id=int(fixture['channel_id']))
-        div_number = int(fixture_channel.category.name.split(f"\U0001F4C5┋{cup_info['name']}┋D")[1][0]) # TODO REFACTOR THIS LATER
+        if "D1" in fixture_channel.category.name:
+            div_number = 1
+        else:
+            div_number = 2 
 
         # Get div info
         self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s and div_number=%s", (fixture['cup_id'], div_number))
@@ -159,8 +162,8 @@ class ServerLoop(commands.Cog):
                 continue
 
             uploads = bs4.BeautifulSoup(requests.get(f"https://urt.li/ac-flawless/{playerteam_info['urt_auth']}/{fixture['date']}/", auth=requests.auth.HTTPBasicAuth(self.bot.urtli_id, self.bot.urtli_pass)).text, features="lxml") 
-            demos = [upload["href"] for upload in uploads.find_all("a") if any(type_ in upload["href"] for type_ in ("dm_68", "urtdemo"))]
-            moss = [upload["href"] for upload in uploads.find_all("a") if any(type_ in upload["href"] for type_ in ("zip"))]
+            demos = [upload["href"] for upload in uploads.find_all("a") if upload["href"].endswith(".urtdemo") or upload["href"].endswith(".dm_68")]
+            moss = [upload["href"] for upload in uploads.find_all("a") if upload["href"].endswith(".zip")]
 
             all_demos = "".join(demos)
             missing_demos = ""
@@ -185,7 +188,7 @@ class ServerLoop(commands.Cog):
 
             # Append the problem message
             if not mossOk and not demoOk:
-                problem_msg  = f'**Demos** ({missing_demos}) and **Moss**' # TODO GET WHICH DEMO IS MISSING 
+                problem_msg  = f'**Demos** ({missing_demos}) and **Moss**' 
                 problem_list.append([playerteam_info['urt_auth'], 'Moss'])
                 problem_list.append([playerteam_info['urt_auth'], 'Demo'])
 
@@ -327,7 +330,7 @@ class ServerLoop(commands.Cog):
                 players_not_on_discord += f"``{player_info['urt_auth']}`` "
                 continue
 
-            dm_text = self.bot.quotes['cmdDM_missing_files'].format(playername=player_todm.display_name, team1=utils.prevent_discord_formating(team1_info['tag']), team2=utils.prevent_discord_formating(team2_info['tag']), problems=dm[1], deltatime= 72 - int(deltahours))
+            dm_text = self.bot.quotes['cmdDM_missing_files'].format(playername=player_todm.display_name, team1=team1_info['name'], team2=team2_info['name'], problems=dm[1], deltatime= 72 - int(deltahours))
             await player_todm.send(dm_text)
 
         # Log problems
