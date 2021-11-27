@@ -4,7 +4,7 @@ from typing import List
 
 import aiohttp
 
-from cogs.ftw.enum import UserTeamRoles, MatchType, GameTypes
+from models import UserTeamRoles, MatchType, GameTypes
 
 
 class FTWClient:
@@ -15,23 +15,25 @@ class FTWClient:
         if self.ftw_api_key is None:
             raise EnvironmentError("FTW_API_KEY not set")
 
-    async def cup_create(self, name: str, abbreviation: str, playoff_length: int,
+    async def cup_create(self, name: str, abbreviation: str, playoff_length: int, minimum_roster_size: int,
                          start_date: datetime, roster_lock_date: datetime) -> int:
         request_body = {
             'name': name,
             'abbreviation': abbreviation,
             'playoff_length': playoff_length,
-            'start_date': start_date,
-            'roster_lock_date': roster_lock_date,
+            'minimum_roster_size': minimum_roster_size,
+            'start_date': start_date.timestamp(),
+            'roster_lock_date': roster_lock_date.timestamp()
         }
+        print(request_body)
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/cup", json=request_body) as resp:
-                resp_body = await resp.json()
                 if resp.status != 200:
                     print(f"Failed ({resp.status}) to create cup")
-                    print(resp_body)
+                    print(await resp.text())
                 else:
+                    resp_body = await resp.json()
                     cup_id = resp_body['cup_id']
                     return cup_id
 
@@ -43,7 +45,7 @@ class FTWClient:
             'urt_auth': urt_auth
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/user", json=request_body) as resp:
                 if resp.status != 200:
                     print(f"Failed ({resp.status}) to create user", request_body)
@@ -56,7 +58,7 @@ class FTWClient:
             'tag': team_tag
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/team", json=request_body) as resp:
                 resp_body = await resp.json()
                 if resp.status != 200:
@@ -66,14 +68,26 @@ class FTWClient:
                     team_id = resp_body['team_id']
                     return team_id
 
-    async def team_join_cup(self, team_id: int, cup_id: int):
+    async def cup_add_team(self, team_id: int, cup_id: int):
         request_body = {
             'team_id': team_id,
             'cup_id': cup_id
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
-            async with session.post(f"{self.ftw_host}/api/v1/cup/team", json=request_body) as resp:
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
+            async with session.post(f"{self.ftw_host}/api/v1/cup/team/add", json=request_body) as resp:
+                if resp.status != 200:
+                    print(f"Failed ({resp.status}) to create team", request_body)
+                    print(await resp.json())
+
+    async def cup_remove_team(self, team_id: int, cup_id: int):
+        request_body = {
+            'team_id': team_id,
+            'cup_id': cup_id
+        }
+        async with aiohttp.ClientSession() as session:
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
+            async with session.post(f"{self.ftw_host}/api/v1/cup/team/remove", json=request_body) as resp:
                 if resp.status != 200:
                     print(f"Failed ({resp.status}) to create team", request_body)
                     print(await resp.json())
@@ -85,7 +99,7 @@ class FTWClient:
             'division': division
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.put(f"{self.ftw_host}/api/v1/cup/team/division", json=request_body) as resp:
                 if resp.status != 200:
                     print(f"Failed ({resp.status}) to create team", request_body)
@@ -98,7 +112,7 @@ class FTWClient:
             'role': role.value
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/team/user/join", json=request_body) as resp:
                 if resp.status != 200:
                     print(f"Failed ({resp.status}) to create team", request_body)
@@ -110,26 +124,26 @@ class FTWClient:
             'discord_id': discord_id
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/team/user/quit", json=request_body) as resp:
                 if resp.status != 200:
                     print(f"Failed to remove {discord_id} from {team_id}")
                     print(await resp.json())
 
-    async def match_create(self, league_id: int, team_ids: List[int], best_of: int, round: int,
+    async def match_create(self, cup_id: int, team_ids: List[int], best_of: int, round: int,
                            match_type: MatchType, match_date: datetime) -> int:
         request_body = {
-            'league_id': league_id,
+            'cup_id': cup_id,
             'team_ids': team_ids,
             'best_of': best_of,
             'round': round,
             'match_type': match_type.value,
-            'match_date': match_date
+            'match_date': match_date.timestamp()
         }
 
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
-            async with session.post(f"{self.ftw_host}/api/v1/team/user/quit", json=request_body) as resp:
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
+            async with session.post(f"{self.ftw_host}/api/v1/match", json=request_body) as resp:
                 resp_body = await resp.json()
                 if resp.status != 200:
                     print(f"Failed to create match")
@@ -140,14 +154,14 @@ class FTWClient:
 
     async def server_locations(self):
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.get(f"{self.ftw_host}/api/v1/rent/locations") as resp:
                 if resp.status == 200:
                     return await resp.json()
 
     async def server_active(self):
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.get(f"{self.ftw_host}/api/v1/rent/active") as resp:
                 if resp.status == 200:
                     return await resp.json()
@@ -163,7 +177,7 @@ class FTWClient:
             'ttl_hours': ttl_hours
         }
         async with aiohttp.ClientSession() as session:
-            session.headers.add("Authorization", f"Bearer {self.ftw_api_key}")
+            session.headers.add("Authorization", f"{self.ftw_api_key}")
             async with session.post(f"{self.ftw_host}/api/v1/rent/match", json=request_body) as resp:
                 resp_body = await resp.json()
                 if resp.status != 200:

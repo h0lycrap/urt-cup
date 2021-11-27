@@ -310,7 +310,7 @@ class Cups(commands.Cog):
         self.bot.conn.commit()
 
         ftw_client: FTWClient = self.bot.ftw
-        await ftw_client.team_join_cup(team['ftw_team_id'], cup['ftw_cup_id'])
+        await ftw_client.cup_add_team(team['ftw_team_id'], cup['ftw_cup_id'])
 
         await ctx.message.delete()
         await ctx.send(self.bot.quotes['cmdForceSignup_success'], delete_after=2)
@@ -700,7 +700,7 @@ class Cups(commands.Cog):
             self.bot.conn.commit()
 
             ftw_client: FTWClient = self.bot.ftw
-            await ftw_client.team_join_cup(clan_tosignup['ftw_team_id'], cup_info['ftw_cup_id'])
+            await ftw_client.cup_add_team(clan_tosignup['ftw_team_id'], cup_info['ftw_cup_id'])
 
             await interaction_signupteamconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSignup_success'].format(teamname=clan_tosignup['name'], cupname=cup_info['name']))
 
