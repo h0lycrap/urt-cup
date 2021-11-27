@@ -26,6 +26,13 @@ class Test(commands.Cog):
     async def urt5(self, ctx):
         await ctx.send(self.bot.quotes['cmdUrt5'])
 
+    '''
+    @commands.command()
+    async def testpickup(self, ctx):
+        embed=discord.Embed(description="[Live scoreboard](https://google.fr)", color=0x1876cd, )
+        await ctx.send(embed=embed)
+    '''
+
     @commands.command()
     async def lytchi(self, ctx):
         uploads = bs4.BeautifulSoup(requests.get("https://urt.li/ac-flawless/adxx/2021-09-19%2020:00:00/", auth=requests.auth.HTTPBasicAuth("flawless", "such cheaters much anticheat uwu")).text, features="lxml") 

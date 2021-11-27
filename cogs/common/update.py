@@ -151,7 +151,7 @@ async def fixture_cards(bot):
         # Update embed
         embed_message = await channel.fetch_message(fixture_info['embed_id'])
         if embed_message:
-            fixture_embed = await embeds.fixture(bot, fixture_id=fixture_info['id'])
-            await embed_message.edit(embed=fixture_embed)
+            fixture_embed, components = await embeds.fixture(bot, fixture_id=fixture_info['id'])
+            await embed_message.edit(embed=fixture_embed, components=components)
 
         

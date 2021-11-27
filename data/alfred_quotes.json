@@ -236,7 +236,7 @@
 	"cmdSchedule_error_time" : "Wrong hour format, please check the instructions.",
 	"cmdSchedule_success" : "Game scheduling invitation sent.",
 	"cmdSchedule_invitation" : "<@&{roleid}> The clan ``{teamname}`` proposes to play the game on ``{gamedate}`` at ``{gametime} UTC``.",
-	"cmdSchedule_invitation_log" : "The clan ``{teamname}`` proposes to play the game against ``{otherteamname}``on ``{gamedate}`` at ``{gametime} UTC``.",
+	"cmdSchedule_invitation_log" : "The clan ``{teamname}`` proposes to play the game against ``{otherteamname}`` on ``{gamedate}`` at ``{gametime} UTC``.",
 
 	"cmdSchedule_admin_success" : "Game scheduled.",
 
@@ -286,7 +286,10 @@
 	"cmdFixProblem_cancel" : "Action canceled.",
 	"cmdFixProblem_success" : "Success!",
 
+	"cmdServerRequest_promptregion" : "You are about to rent a server for this game, the ``/connect`` and ``rconpassword`` will be provided in this channel and will be visible by both teams. Please keep in mind that the server will expire **5h** after being generated.",
+
 	"cmdDM_missing_files" : "Dear {playername}, \n\nFollowing your match ``{team1}`` vs ``{team2}``  you did not upload the following files on <https://urt.li/#flawless>: \n :small_blue_diamond: {problems} \n\nYou have __**{deltatime} hours**__ left to upload the missing files according to the rules (<https://ggle.io/4Fup>).\n Past the deadline, we will be forced to apply a penalty to your team. \n\nNB : If you have any problem with your moss or demos, please go to the *# help* channel and click on *MOSS Help* to prevent any undeserved penalties. \n\nYours faithfully,\n*Alfred, your butler*",
+	"cmdServerRequest_success" : "**{username}** requested a server from {location_emoji} **{location}**. Follow the instructions below to setup the server \n ||/connect {ip} ; password {password} ; rconpassword {rcon}|| \n\n:small_blue_diamond: __**TS** server setup__:\n``/rcon exec utcs_fall21_ts``\n``/rcon map <ts map name>``\n``/rcon g_strattime 5`` \n\n:small_blue_diamond: __**CTF** server setup__:\n``/rcon exec utcs_fall21_ctf``\n``/rcon map <ctf map name>``",
 
 	"cmdSchedule_error_args" : "Please use the command as following: ``!schedule <date> <time (UTC)>``",
 	"cmdSchedule_error_date" : "Invalid date format. Please use ``DD/MM/YYYY``",

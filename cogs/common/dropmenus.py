@@ -73,3 +73,10 @@ def problems(problem_list, id):
         select_options.append(SelectOption(label = f"{problem[0]} {problem[1]}", value = i))
 
     return [Select( placeholder = "Select a problem to fix", options = select_options, custom_id=id)]
+
+def server_regions(region_list): 
+    select_options = []
+    for (i, region) in enumerate(region_list):
+        select_options.append(SelectOption(label = region[0], value = i, emoji=region[1]))
+
+    return [Select( placeholder = "Select the server location", options = select_options, custom_id="dropmenu_server_region")]

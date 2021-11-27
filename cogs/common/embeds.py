@@ -1,8 +1,10 @@
 import discord
+from discord_components import component
 import flag
 import re
 import datetime
 import cogs.common.utils as utils
+from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
 def player(bot, auth):
     bot.cursor.execute("SELECT * FROM Users WHERE urt_auth=%s;", (auth,))
@@ -471,7 +473,14 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
     embed.add_field(name=":map: Map CTF", value= ctf_map_string, inline=True)
     embed.add_field(name=":link: Demo and MOSS", value= f"https://urt.li/#flawless", inline=True)
 
-    return embed
+    components = [[
+            Button(style=ButtonStyle.blue, label="Schedule", custom_id=f"button_fixture_schedule", emoji="\U0001F4C5"),
+            Button(style=ButtonStyle.blue, label="Pick & ban", custom_id=f"button_fixture_startpickban", emoji="\U0001F5FA"),
+            Button(style=ButtonStyle.blue, label="Request a server", custom_id=f"button_fixture_requestserver", emoji="\U0001F5A5"),
+            Button(style=ButtonStyle.grey, label="Admin Panel", custom_id=f"button_edit_fixture")
+            ]]
+
+    return embed, components
 
 async def match_index(bot, cup_id, channel):
     # Get fixtures 
