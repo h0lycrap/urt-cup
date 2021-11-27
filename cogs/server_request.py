@@ -1,6 +1,13 @@
+import random
+from typing import List
+
+import asyncio
 import discord
+import flag
 from discord import channel
 from discord.ext import commands, tasks
+from ftwgl import FTWClient, GameType
+
 import cogs.common.utils as utils
 import cogs.common.embeds as embeds
 import cogs.common.update as update
@@ -41,28 +48,43 @@ class ServerRequest(commands.Cog):
         '''
 
         # Make server location drop menu
-        region_list = [
-            ["East coast", "\U0001F1FA\U0001F1F8"],
-            ["West coast", "\U0001F1FA\U0001F1F8"],
-            ["UK", "\U0001F1EC\U0001F1E7"],
-            ["France", "\U0001F1EB\U0001F1F7"],
-            ["Germany", "\U0001F1E9\U0001F1EA"]
-        ]
+        ftw_client: FTWClient = self.bot.ftw
+        servers = await ftw_client.server_locations()
+
+        region_list: List[dropmenus.RegionList] = []
+        for server in servers.values():
+            r = dropmenus.RegionList()
+            r.label = f"{server['name']}, {server['country']}"
+            r.emoji = flag.flagize(f":{server['country']}:")
+            r.dcid = server['dcid']
+            region_list.append(r)
+
         server_region_dropmenu = dropmenus.server_regions(region_list)
 
         # Get server location
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_promptregion'], components=server_region_dropmenu)
         interaction_serverlocation = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "dropmenu_server_region" and i.message.channel.id == interaction.message.channel.id)
-        server_location = region_list[int(interaction_serverlocation.component[0].value)]
+        server_dcid = int(interaction_serverlocation.component[0].value)
 
-        # TODO: Generate server
-        server_ip = "serverip"
-        server_pass = "serverpass"
-        server_rcon = "serverrcon"
+        # TODO: Allow for a team to select which gametype will be played first
+        server_gametype = GameType.team_survivor
 
+        # Server will stay alive even after ttl expiration if players are connected
+        server_ttl = (int(fixture_info['format'][2]) // 2) + 1  # ie. (BO3//2)+1 == 2 hour, (BO5//2)+1 == 3 hours
+        server_rcon = str(random.randint(111111, 999999))
+        server_pass = str(random.randint(111111, 999999))
+
+        # Request to get a server
+        server_id = await ftw_client.server_rent(fixture_info['ftw_match_id'], server_dcid, server_gametype, server_rcon, server_pass, server_ttl)
+
+        # Wait for server to finish spawning
+        server = await ftw_client.server_get_with_id(server_id)
+        while 'ip' not in server['config']:
+            await asyncio.sleep(5)
+            server = await ftw_client.server_get_with_id(server_id)
+
+        server_ip = server['config']['ip']
         await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=server_location[0], location_emoji=server_location[1], ip=server_ip, password=server_pass, rcon=server_rcon, username=user_info['ingame_name']))
-
-
 
 
 def setup(bot):
