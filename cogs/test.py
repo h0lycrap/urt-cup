@@ -26,12 +26,12 @@ class Test(commands.Cog):
     async def urt5(self, ctx):
         await ctx.send(self.bot.quotes['cmdUrt5'])
 
-    '''
+    
     @commands.command()
     async def testpickup(self, ctx):
-        embed=discord.Embed(description="[Live scoreboard](https://google.fr)", color=0x1876cd, )
+        embed=discord.Embed(description="[Live scoreboard](ms-settings://)", color=0x1876cd, )
         await ctx.send(embed=embed)
-    '''
+    
 
     @commands.command()
     async def lytchi(self, ctx):

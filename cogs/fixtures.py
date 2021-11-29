@@ -234,7 +234,6 @@ class Fixtures(commands.Cog):
         role_team1 = discord.utils.get(self.guild.roles, id=int(team1['role_id'])) 
         role_team2 = discord.utils.get(self.guild.roles, id=int(team2['role_id'])) 
 
-        '''
         # Set the permissions
         overwrites = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -245,8 +244,6 @@ class Fixtures(commands.Cog):
             role_moderator: discord.PermissionOverwrite(read_messages=True),
             role_streamer: discord.PermissionOverwrite(read_messages=True)
         }
-        '''
-        overwrites = {} ##########################
 
         # Create text channel 
         fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category) 
@@ -420,10 +417,14 @@ class Fixtures(commands.Cog):
         await interaction.respond(type=6)
 
         if both_team_agreed:
-            if (fixture_info['format'] == 'BO2'):
+            if (fixture_info['format'] == 'BO2' or fixture_info['format'] == 'BO3'):
                 await self.pickban_bo2(fixture_info, team_button, other_team_button, interaction.message.channel)
 
-            # TODO Implement BO3 and BO5
+            if (fixture_info['format'] == 'BO3' or fixture_info['format'] == 'BO5'):
+                # send decider message
+                pass
+
+            # TODO BO5
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
