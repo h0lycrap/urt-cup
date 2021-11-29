@@ -10,6 +10,9 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
+from ftwgl import FTWClient
+
+
 class Fixtures(commands.Cog):
 
     def __init__(self, bot):
@@ -246,10 +249,12 @@ class Fixtures(commands.Cog):
         }
 
         # Create text channel 
-        fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category) 
-        
+        fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category)
 
-        self.bot.cursor.execute("INSERT INTO Fixtures (cup_id, team1, team2, format, channel_id) VALUES (%d, %s, %s, %s, %s)", (cup_info['id'], team1['id'], team2['id'], fixture_format, str(fixture_channel.id)))
+        ftw_client: FTWClient = self.bot.ftw
+        ftw_match_id = await ftw_client.match_create(cup_info['ftw_cup_id'], [team1['ftw_team_id'], team2['ftw_team_id']], )
+
+        self.bot.cursor.execute("INSERT INTO Fixtures (cup_id, team1, team2, format, channel_id, ftw_match_id) VALUES (%d, %s, %s, %s, %s, %s)", (cup_info['id'], team1['id'], team2['id'], fixture_format, str(fixture_channel.id), ftw_match_id))
         self.bot.conn.commit()
 
         # Print on the log channel
