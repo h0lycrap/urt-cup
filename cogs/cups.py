@@ -258,7 +258,13 @@ class Cups(commands.Cog):
         await chan_match_index.set_permissions(role_streamer, view_channel=True)
 
         ftw_client: FTWClient = self.bot.ftw
-        ftw_cup_id = await ftw_client.cup_create(name, utils.create_abbreviation(name), mini_roster, signup_start_date, signup_end_date)
+        ftw_cup_id = await ftw_client.cup_create(
+            name=name,
+            abbreviation=utils.create_abbreviation(name),
+            playoff_length=None,
+            minimum_roster_size=mini_roster,
+            start_date=signup_start_date,
+            roster_lock_date=signup_end_date)
 
         self.bot.cursor.execute(
             "INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster, chan_results_id, ftw_cup_id) "
