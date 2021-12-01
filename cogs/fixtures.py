@@ -280,7 +280,7 @@ class Fixtures(commands.Cog):
         self.bot.conn.commit()
 
         # Print on the log channel
-        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        log_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(content=f"The fixture for the cup ``{cup_info['name']}`` between ``{team1['tag']}`` and ``{team2['tag']}`` has been created.")
 
         # Send fixture card

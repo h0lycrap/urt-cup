@@ -122,7 +122,6 @@ if __name__ == "__main__":
                 cup_id=fixture['ftw_cup_id'],
                 team_ids=[fixture['ftw_team1_id'], fixture['ftw_team2_id']],
                 best_of=int(fixture['format'][2]),
-                round=None,
                 match_type=MatchType.group,
                 match_date=match_date
             )
