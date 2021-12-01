@@ -55,7 +55,11 @@ class Fixtures(commands.Cog):
         elif interaction.component.id.startswith("button_fixture_startpickban"):
             await self.pickban_invitation(interaction)
         elif interaction.component.id.startswith("button_pickban_knifewon"):
-            await self.pickban_knifewon(interaction)
+            await self.pickban_knifewon(interaction) 
+        elif interaction.component.id.startswith("button_pickban_draw_knifewon"):
+            await self.pickban_draw_knifewon(interaction)
+        elif interaction.component.id.startswith("button_pickban_draw"):
+            await self.pickban_draw_invitation(interaction)
         elif interaction.component.id.startswith("button_enter_scores"):
             await self.enter_scores(interaction)
             self.bot.async_loop.create_task(update.fixtures(self.bot))
@@ -109,7 +113,7 @@ class Fixtures(commands.Cog):
         fixture_format = formats[int(interaction_format.component[0].value)]
 
         # Select title
-        titles = ['Quarter finals', 'Semi Final', 'Consolation Final', 'Final', 'Other']
+        titles = ['Quarter Finals', 'Semi Finals', 'Silver Final', 'Final', 'Other']
         droplist_title= dropmenus.formats(titles, "Select a title", "dropmenu_title")
         await interaction_format.respond(type=InteractionType.ChannelMessageWithSource, content="What is the title of this game?", components=droplist_title)
         interaction_title = await self.bot.wait_for("select_option", check = lambda i: i.user.id == interaction.author.id and i.parent_component.id == "dropmenu_title")
@@ -251,13 +255,25 @@ class Fixtures(commands.Cog):
         # Create text channel 
         fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category)
 
+        def title_to_ftw_match_type(input: str) -> MatchType:
+            if input == 'Quarter Finals':
+                return MatchType.quarter_final
+            elif input == 'Semi Finals':
+                return MatchType.semi_final
+            elif input == 'Silver Final':
+                return MatchType.silver_final
+            elif input == 'Final':
+                return MatchType.grand_final
+            else:
+                return MatchType.group
+
         ftw_client: FTWClient = self.bot.ftw
         ftw_match_id = await ftw_client.match_create(
             cup_id=cup_info['ftw_cup_id'],
             team_ids=[team1['ftw_team_id'], team2['ftw_team_id']],
             best_of=int(cup_info['format'][2]),
             round=None,
-            match_type=MatchType.group,
+            match_type=title_to_ftw_match_type(title),
             match_date=None
         )
 
@@ -432,18 +448,123 @@ class Fixtures(commands.Cog):
             if (fixture_info['format'] == 'BO2' or fixture_info['format'] == 'BO3'):
                 await self.pickban_bo2(fixture_info, team_button, other_team_button, interaction.message.channel)
 
-            if (fixture_info['format'] == 'BO3' or fixture_info['format'] == 'BO5'):
-                # send decider message
-                pass
+            if (fixture_info['format'] == 'BO5'):
+                await self.pickban_bo5(fixture_info, team_button, other_team_button, interaction.message.channel)
 
-            # TODO BO5
+            if (fixture_info['format'] == 'BO3' or fixture_info['format'] == 'BO5'):
+                await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw")]])
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
+        fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed, components=components)
 
-    # Team 1 won the knife fight
+    async def pickban_draw_invitation(self, interaction):
+        # Check if fixture busy
+        if interaction.message.channel.id in self.bot.fixtures_busy:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_busy'])
+            return
+
+        # Get  feature  
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Check if the game is on going
+        if not fixture_info['status']:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_notscheduled'])
+            return
+        elif fixture_info['status'] != 2:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_finished'])
+            return
+
+        #Flag busy
+        self.bot.fixtures_busy.append(interaction.message.channel.id)
+
+        # Get clans info
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+        team1_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+        team2_info = self.bot.cursor.fetchone()
+
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanDrawInvitation_prompt'], components=[[
+                Button(style=ButtonStyle.blue, label=f"{team1_info['tag']}", emoji=flag.flagize(team1_info['country']), custom_id=f"button_pickban_draw_knifewon_{team1_info['id']}"),
+                Button(style=ButtonStyle.blue, label=f"{team2_info['tag']}", emoji=flag.flagize(team2_info['country']), custom_id=f"button_pickban_draw_knifewon_{team2_info['id']}")]], ephemeral=False)
+
+
+    async def pickban_draw_knifewon(self, interaction):
+        # Get  feature  
+        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
+        fixture_info = self.bot.cursor.fetchone()
+
+        # Get clans info
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
+        team1_info = self.bot.cursor.fetchone()
+        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
+        team2_info = self.bot.cursor.fetchone()
+
+        # Get the team of the clicker
+        user = discord.utils.get(self.guild.members, id=interaction.user.id)
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1_info['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2_info['role_id']))
+        if team1_role in user.roles:
+            team_click = team1_info
+            otherteam_click = team2_info
+        elif team2_role in user.roles:
+            team_click = team2_info
+            otherteam_click = team1_info
+        else:
+            print(f"ERROR: can't retrieve clicking team for fixture {fixture_info['id']}")  
+            self.bot.fixtures_busy.remove(interaction.message.channel.id)
+            return  
+
+        # Check if the team was clicked before
+        team_clicked_before_id = interaction.component.id.split("_")[-2]
+        both_team_agreed = False
+        if team_clicked_before_id == str(otherteam_click['id']):
+            both_team_agreed = True
+
+        # Get team from button
+        team_id = interaction.component.id.split("_")[-1]
+        if team_id == str(team1_info['id']):
+            team_button = team1_info
+            other_team_button = team2_info
+            team1_button_style = ButtonStyle.green
+            team2_button_style = ButtonStyle.blue
+            if both_team_agreed:
+                team1_button_label = f"{team1_info['tag']}"
+            else:
+                team1_button_label = f"{team1_info['tag']} (claimed by {team_click['tag']})"
+            team2_button_label = f"{team2_info['tag']}"
+            team1_button_id = f"button_pickban_draw_knifewon_{team_click['id']}_{team1_info['id']}"
+            team2_button_id = f"button_pickban_draw_knifewon_{team2_info['id']}"
+            
+        elif team_id == str(team2_info['id']):
+            team_button = team2_info
+            other_team_button = team1_info
+            team1_button_style = ButtonStyle.blue
+            team2_button_style = ButtonStyle.green
+            if both_team_agreed:
+                team2_button_label = f"{team2_info['tag']}"
+            else:
+                team2_button_label = f"{team2_info['tag']} (claimed by {team_click['tag']})"
+            team1_button_label = f"{team1_info['tag']}"
+            team2_button_id = f"button_pickban_draw_knifewon_{team_click['id']}_{team2_info['id']}"
+            team1_button_id = f"button_pickban_draw_knifewon_{team1_info['id']}"
+        else:
+            print(f"ERROR: cant retrieve team from button for fixture {fixture_info['id']}")
+            self.bot.fixtures_busy.remove(interaction.message.channel.id)
+            return 
+
+        await interaction.message.edit(self.bot.quotes['cmdPickBanDrawInvitation_prompt'], components=[[
+                Button(style=team1_button_style, label=team1_button_label, emoji=flag.flagize(team1_info['country']), custom_id=team1_button_id, disabled=both_team_agreed),
+                Button(style=team2_button_style, label=team2_button_label, emoji=flag.flagize(team2_info['country']), custom_id=team2_button_id, disabled=both_team_agreed)]])
+
+        await interaction.respond(type=6)
+
+        if both_team_agreed:
+            await self.pickban_draw(fixture_info, team_button, other_team_button, interaction.message.channel)
+
+
     async def pickban_bo2(self, fixture_info, team1, team2, channel):
 
         # Get map lists
@@ -508,6 +629,78 @@ class Fixtures(commands.Cog):
 
         # Notify
         await channel.send(self.bot.quotes['cmdPickBan_bo2_end'].format(teamname=team1['name'], tsmap=ts_map['name'], ctfmap=ctf_map['name']))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
+
+    async def pickban_bo5(self, fixture_info, team1, team2, channel):
+
+        # Get map lists
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('TS',))
+        ts_map_list = self.bot.cursor.fetchall()
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('CTF',))
+        ctf_map_list = self.bot.cursor.fetchall()
+
+        # Get team roles
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2['role_id']))
+
+
+        # Ask winning team what map advantage they want 
+        mapadvantage_msg = await channel.send(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+            Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ban_advantage_ts"),
+            Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ban_advantage_ctf")
+        ]])
+
+        gamemode_advantage_check = False
+        while not gamemode_advantage_check:
+            interaction_gamemodeadvantage = await self.bot.wait_for("button_click", check = lambda i: i.component.id.startswith("button_gamemode_ban_advantage"))
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_gamemodeadvantage.author.id)
+            if team1_role in user_clicking.roles:
+                gamemode_advantage_check = True
+            else:
+                await interaction_gamemodeadvantage.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team1['name']))
+
+        if interaction_gamemodeadvantage.component.id == 'button_gamemode_ban_advantage_ts':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.green, label="TS", custom_id="button_gamemode_ban_advantage_ts", disabled=True),
+                Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ban_advantage_ctf", disabled=True)
+            ]])
+            mapadvantage_ts = team1
+            mapadvantage_ctf = team2
+
+        
+        if interaction_gamemodeadvantage.component.id == 'button_gamemode_ban_advantage_ctf':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBan_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ban_advantage_ts", disabled=True),
+                Button(style=ButtonStyle.green, label="CTF", custom_id="button_gamemode_ban_advantage_ctf", disabled=True)
+            ]])
+            mapadvantage_ts = team2
+            mapadvantage_ctf = team1
+
+        await interaction_gamemodeadvantage.respond(type=6)
+        ts_map1, ts_map2 = await self.banuntil2_get2(mapadvantage_ctf, mapadvantage_ts, channel, "TS")
+        ctf_map1, ctf_map2 = await self.banuntil2_get2(mapadvantage_ctf, mapadvantage_ts, channel, "CTF")
+
+        # Add maps to DB
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ts_map1['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ts_map2['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ctf_map1['id']))
+        self.bot.conn.commit()
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], ctf_map2['id']))
+        self.bot.conn.commit()
+
+        # Set fixture to on-going
+        self.bot.cursor.execute("UPDATE Fixtures set status = 2 WHERE id=%s", (fixture_info['id'],))
+        self.bot.conn.commit()
+
+        # Remove busy status
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_bo5_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name'], ctfmap1=ctf_map1['name'], ctfmap2=ctf_map2['name']))
 
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
@@ -599,10 +792,7 @@ class Fixtures(commands.Cog):
             picked_map = maps[int(interaction_pick.component[0].value)]
             user_clicking = discord.utils.get(self.guild.members, id=interaction_pick.author.id)
             if not team_topick_role in user_clicking.roles:
-                if gamemode == "TS":
-                    await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=mapadvantage_ts['name']))
-                else:
-                    await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=mapadvantage_ctf['name']))
+                await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=mapadvantage_ctf['name']))
                 continue
 
             # Ask confirmation
@@ -623,7 +813,262 @@ class Fixtures(commands.Cog):
 
         await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map['name'], gamemode=gamemode))
 
-        return picked_map    
+        return picked_map  
+
+    async def banuntil2_get2(self, mapadvantage_ctf, mapadvantage_ts, channel, gamemode):
+        if gamemode == "TS":
+            # Start TS pick and ban
+            await channel.send(self.bot.quotes['cmdPickBan_TS_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
+            # The ctf advantage team starts to ban
+            team_toban = mapadvantage_ctf
+        else:
+            # Start CTF pick and ban
+            await channel.send(self.bot.quotes['cmdPickBan_CTF_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
+            # The ctf advantage team starts to ban
+            team_toban = mapadvantage_ts
+
+        # Get maps
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s;", (gamemode,))
+        maps = self.bot.cursor.fetchall()
+        maps.sort(key=lambda x: x['name'])
+
+        embed_title = f"{gamemode} Maps"
+
+        # Send embeds with the remaining maps
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        # Ban until 2 maps are left
+        while len(maps) > 2:
+            # Prompt the ban
+            pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+
+            # Get banning team role
+            team_toban_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+            ban_check = False
+            while not ban_check:
+                interaction_ban = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+                map_toban = maps[int(interaction_ban.component[0].value)]
+                user_clicking = discord.utils.get(self.guild.members, id=interaction_ban.author.id)
+                if not team_toban_role in user_clicking.roles:
+                    await interaction_ban.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+                    continue
+
+                # Ask confirmation
+                await interaction_ban.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_confirmation'].format(mapname=map_toban['name']), components=[[
+                                            Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                            Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+                interaction_banconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_ban.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+                if interaction_banconfirmation.component.id == 'button_pickban_no':
+                    continue
+                elif interaction_banconfirmation.component.id == 'button_pickban_yes':
+                    ban_check = True
+
+            await interaction_banconfirmation.respond(type=6)
+            # Ban the map
+            maps.remove(map_toban)
+
+            # Edit embed and delete prompt
+            await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name'], teamname=team_toban['name']))
+            map_embed = embeds.map_list(maps, embed_title)
+            await channel.send(embed=map_embed)
+            await pickban_prompt_msg.delete()
+
+            # Switch banning team
+            if team_toban == mapadvantage_ctf:
+                team_toban = mapadvantage_ts
+            else:
+                team_toban = mapadvantage_ctf
+
+        return maps[0], maps[1]
+
+    async def pickban_draw(self, fixture_info, team1, team2, channel):
+
+        # Get map lists
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('TS',))
+        ts_map_list = self.bot.cursor.fetchall()
+        self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s", ('CTF',))
+        ctf_map_list = self.bot.cursor.fetchall()
+
+        # Remove played maps
+        self.bot.cursor.execute("SELECT * FROM FixtureMap WHERE fixture_id=%s", (fixture_info['id'],))
+        maps_played = self.bot.cursor.fetchall()
+        for map_played in maps_played:
+            self.bot.cursor.execute("SELECT * FROM Maps WHERE id=%s", (map_played['map_id'],))
+            map = self.bot.cursor.fetchone()
+            if map in ts_map_list:
+                ts_map_list.remove(map)
+            elif map in ctf_map_list:
+                ctf_map_list.remove(map)
+
+        # Get team roles
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2['role_id']))
+
+
+        # Ask winning team what map advantage they want 
+        mapadvantage_msg = await channel.send(self.bot.quotes['cmdPickBanDraw_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+            Button(style=ButtonStyle.blue, label="Gamemode", custom_id="button_draw_advantage_gamemode"),
+            Button(style=ButtonStyle.blue, label="Map", custom_id="button_draw_advantage_map")
+        ]])
+
+        gamemode_advantage_check = False
+        while not gamemode_advantage_check:
+            interaction_gamemodeadvantage = await self.bot.wait_for("button_click", check = lambda i: i.component.id.startswith("button_draw_advantage_"))
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_gamemodeadvantage.author.id)
+            if team1_role in user_clicking.roles:
+                gamemode_advantage_check = True
+            else:
+                await interaction_gamemodeadvantage.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team1['name']))
+
+        if interaction_gamemodeadvantage.component.id == 'button_draw_advantage_gamemode':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBanDraw_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.green, label="Gamemode", custom_id="button_draw_advantage_gamemode", disabled=True),
+                Button(style=ButtonStyle.blue, label="Map", custom_id="button_draw_advantage_map", disabled=True)
+            ]])
+            gamemode_advantage = team1
+            gamemode_advantage_role = team1_role
+            map_advantage = team2
+            map_advantage_role = team2_role
+
+        
+        if interaction_gamemodeadvantage.component.id == 'button_draw_advantage_map':
+            await mapadvantage_msg.edit(self.bot.quotes['cmdPickBanDraw_gamemode_advantage_prompt'].format(team1_role_id=team1_role.id), components=[[
+                Button(style=ButtonStyle.blue, label="Gamemode", custom_id="button_draw_advantage_gamemode", disabled=True),
+                Button(style=ButtonStyle.green, label="Map", custom_id="button_draw_advantage_map", disabled=True)
+            ]])
+            gamemode_advantage = team2
+            gamemode_advantage_role = team2_role
+            map_advantage = team1
+            map_advantage_role = team1_role
+
+        await interaction_gamemodeadvantage.respond(type=6)
+        
+        # Get gamemode
+        gamemode_msg = await channel.send(self.bot.quotes['cmdPickBanDraw_gamemode_prompt'].format(gamemode_role=gamemode_advantage_role.id), components=[[
+            Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ts"),
+            Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ctf")
+        ]])
+
+        gamemode_check = False
+        while not gamemode_check:
+            interaction_gamemode = await self.bot.wait_for("button_click", check = lambda i: i.component.id.startswith("button_gamemode_"))
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_gamemode.author.id)
+            if gamemode_advantage_role in user_clicking.roles:
+                gamemode_check = True
+            else:
+                await interaction_gamemode.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team1['name']))
+
+        if interaction_gamemode.component.id == 'button_gamemode_ts':
+            await gamemode_msg.edit(self.bot.quotes['cmdPickBanDraw_gamemode_prompt'].format(gamemode_role=gamemode_advantage_role.id), components=[[
+                Button(style=ButtonStyle.green, label="TS", custom_id="button_gamemode_ts", disabled=True),
+                Button(style=ButtonStyle.blue, label="CTF", custom_id="button_gamemode_ctf", disabled=True)
+            ]])
+            maps = ts_map_list
+            gamemode = "TS"
+
+        
+        if interaction_gamemode.component.id == 'button_gamemode_ctf':
+            await gamemode_msg.edit(self.bot.quotes['cmdPickBanDraw_gamemode_prompt'].format(gamemode_role=gamemode_advantage_role.id), components=[[
+                Button(style=ButtonStyle.blue, label="TS", custom_id="button_gamemode_ts", disabled=True),
+                Button(style=ButtonStyle.green, label="CTF", custom_id="button_gamemode_ctf", disabled=True)
+            ]])
+            maps = ctf_map_list
+            gamemode = "CTF"
+
+        await interaction_gamemode.respond(type=6)
+
+        # Ban 2 maps
+        maps.sort(key=lambda x: x['name'])
+
+        embed_title = f"{gamemode} Maps"
+
+        # Send embeds with the remaining maps
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        for i in range(2):
+            # Prompt the ban
+            pickban_dropmenu = dropmenus.maps(maps, "pickban_draw")
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=gamemode_advantage_role.id), components=pickban_dropmenu)
+
+            ban_check = False
+            while not ban_check:
+                interaction_ban = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_draw" and i.message.channel.id == channel.id)
+                map_toban = maps[int(interaction_ban.component[0].value)]
+                user_clicking = discord.utils.get(self.guild.members, id=interaction_ban.author.id)
+                if not gamemode_advantage_role in user_clicking.roles:
+                    await interaction_ban.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=gamemode_advantage['name']))
+                    continue
+
+                # Ask confirmation
+                await interaction_ban.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_confirmation'].format(mapname=map_toban['name']), components=[[
+                                            Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                            Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+                interaction_banconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_ban.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+                if interaction_banconfirmation.component.id == 'button_pickban_no':
+                    continue
+                elif interaction_banconfirmation.component.id == 'button_pickban_yes':
+                    ban_check = True
+
+            await interaction_banconfirmation.respond(type=6)
+            # Ban the map
+            maps.remove(map_toban)
+
+            # Edit embed and delete prompt
+            await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name'], teamname=gamemode_advantage['name']))
+            map_embed = embeds.map_list(maps, embed_title)
+            await channel.send(embed=map_embed)
+            await pickban_prompt_msg.delete()
+
+        # Pick the map
+        pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+        pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_pick'].format(team_role_id=map_advantage_role.id), components=pickban_dropmenu)
+
+        pick_check = False
+        while not pick_check:
+            interaction_pick = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+            picked_map = maps[int(interaction_pick.component[0].value)]
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_pick.author.id)
+            if not map_advantage_role in user_clicking.roles:
+                await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=map_advantage['name']))
+                continue
+
+            # Ask confirmation
+            await interaction_pick.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_pick_confirmation'].format(mapname=picked_map['name']), components=[[
+                                        Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                        Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+            interaction_pickconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_pick.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+            if interaction_pickconfirmation.component.id == 'button_pickban_no':
+                continue
+            elif interaction_pickconfirmation.component.id == 'button_pickban_yes':
+                pick_check = True
+
+        await interaction_pickconfirmation.respond(type=6)
+
+        # Delete prompt
+        await pickban_prompt_msg.delete()
+
+        await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map['name'], gamemode=gamemode))
+
+
+        # Add map to DB
+        self.bot.cursor.execute("INSERT INTO FixtureMap (fixture_id, map_id) VALUES (%s, %s)", (fixture_info['id'], picked_map['id']))
+        self.bot.conn.commit()
+
+        # Remove busy status
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_draw_end'].format(teamname=team1['name'], gamemode=gamemode, map=picked_map['name']))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))  
 
     async def schedule_fixture(self, interaction):
         # Check if user is busy
@@ -823,8 +1268,8 @@ class Fixtures(commands.Cog):
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
+        fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed, components=components)
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
@@ -884,8 +1329,8 @@ class Fixtures(commands.Cog):
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
+        fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed, components=components)
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
@@ -1193,7 +1638,11 @@ class Fixtures(commands.Cog):
         # Get cup info and post results
         self.bot.cursor.execute("SELECT * FROM Cups WHERE id=%s", (fixture_info['cup_id'],))
         cup_info = self.bot.cursor.fetchone()
-        match_type = interaction.message.channel.category.name.split('┋')[2].split()[0]
+
+        if interaction.message.channel.name.startswith("round"):
+            match_type = interaction.message.channel.category.name.split('┋')[2].split()[0]
+        else:
+            match_type = interaction.message.channel.name.split('┋')[0].title().replace('-', " ")
         results_chan = discord.utils.get(self.guild.channels, id=int(cup_info['chan_results_id']))
         if results_chan:
             result_str = embeds.results(self.bot, fixture_info, match_type)
@@ -1211,8 +1660,8 @@ class Fixtures(commands.Cog):
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
+        fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed, components=components)
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
@@ -1280,8 +1729,8 @@ class Fixtures(commands.Cog):
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
-        fixture_embed = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
-        await embed_message.edit(embed=fixture_embed)
+        fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
+        await embed_message.edit(embed=fixture_embed, components=components)
 
 
 
