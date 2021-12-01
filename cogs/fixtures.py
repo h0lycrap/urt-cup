@@ -272,7 +272,6 @@ class Fixtures(commands.Cog):
             cup_id=cup_info['ftw_cup_id'],
             team_ids=[team1['ftw_team_id'], team2['ftw_team_id']],
             best_of=int(cup_info['format'][2]),
-            round=None,
             match_type=title_to_ftw_match_type(title),
             match_date=None
         )
