@@ -1,3 +1,5 @@
+from typing import List
+
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
 import flag
 
@@ -74,9 +76,16 @@ def problems(problem_list, id):
 
     return [Select( placeholder = "Select a problem to fix", options = select_options, custom_id=id)]
 
-def server_regions(region_list): 
+
+class RegionList:
+    dcid: str
+    label: str
+    emoji: str
+
+
+def server_regions(region_list: List[RegionList]):
     select_options = []
-    for (i, region) in enumerate(region_list):
-        select_options.append(SelectOption(label = region[0], value = i, emoji=region[1]))
+    for region in region_list:
+        select_options.append(SelectOption(label = region.label, value=region.dcid, emoji=region.emoji))
 
     return [Select( placeholder = "Select the server location", options = select_options, custom_id="dropmenu_server_region")]
