@@ -22,7 +22,7 @@ def check_flag_emoji(cursor, flag_to_check):
     return country, cursor.fetchone()
 
 # Returns true if the input is a date DD/MM/YYYY and also returns the date object
-def check_date_format(date_input) -> Tuple[bool, Union[datetime, None]]:
+def check_date_format(date_input):
     date_elems = [e for e in date_input.split('/') if e.isnumeric()]
     if len(date_elems) != 3:
         return False, None
