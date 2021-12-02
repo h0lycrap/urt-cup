@@ -108,11 +108,12 @@ if __name__ == "__main__":
                 team_id=signup['ftw_team_id'],
                 cup_id=signup['ftw_cup_id']
             )
-            await ftw_client.cup_set_team_division(
-                team_id=signup['ftw_team_id'],
-                cup_id=signup['ftw_cup_id'],
-                division=signup['div_number']
-            )
+            if signup['div_number'] is not None:
+                await ftw_client.cup_set_team_division(
+                    team_id=signup['ftw_team_id'],
+                    cup_id=signup['ftw_cup_id'],
+                    division=signup['div_number']
+                )
 
 
         # Migrate fixtures
