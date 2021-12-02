@@ -37,14 +37,14 @@ if __name__ == "__main__":
 
     async def data_backfill():
         # Migrate users
-        #cursor.execute("SELECT * FROM Users")
-        #users = cursor.fetchall()
-        #for user in users:
-        #    await ftw_client.user_create_or_update(
-        #        discord_id=user['discord_id'],
-        #        discord_username=user['ingame_name'],
-        #        urt_auth=user['urt_auth']
-        #    )
+        cursor.execute("SELECT * FROM Users")
+        users = cursor.fetchall()
+        for user in users:
+           await ftw_client.user_create_or_update(
+               discord_id=user['discord_id'],
+               discord_username=user['ingame_name'],
+               urt_auth=user['urt_auth']
+           )
 
         # Migrate teams
         cursor.execute("""SELECT t.id as team_id, u.discord_id, t.name, t.tag
