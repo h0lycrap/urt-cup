@@ -59,7 +59,7 @@ class ServerRequest(commands.Cog):
             r.dcid = server['DCID']
             region_list[r.dcid] = r
 
-        server_region_dropmenu = dropmenus.server_regions(region_list.values())
+        server_region_dropmenu = dropmenus.server_regions(list(region_list.values()))
 
         # Get server location
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_promptregion'], components=server_region_dropmenu)
