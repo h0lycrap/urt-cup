@@ -769,11 +769,14 @@ def results(bot, fixture_info, match_type):
     bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id = m.id WHERE f.fixture_id = %s", (fixture_info['id'],))
     maps = bot.cursor.fetchall()
 
-    if fixture_info['format'] == "BO2":
+    map_str = ""
+    score_str = ""
+    for i in range(len(maps)):
+        map_str += f"**{maps[i]['name']}** *({maps[i]['gamemode']})*"
+        score_str += f"**{maps[i]['team1_score']}-{maps[i]['team2_score']}**"
+        if i < len(maps) - 1:
+            map_str += "  /  "
+            score_str += "  /  "
 
-        result_str = f"**[{match_type}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : **{maps[0]['name']}** *({maps[0]['gamemode']})*  /  **{maps[1]['name']}** *({maps[1]['gamemode']})*    **|**    :dart: : **{maps[0]['team1_score']}-{maps[0]['team2_score']}**  /  **{maps[1]['team1_score']}-{maps[1]['team2_score']}**"
-
-        return result_str
-
-    else: # TODO IMPLEMENT BO3/5...
-        return "."
+    result_str = f"**[{match_type}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : {map_str}    **|**    :dart: : {score_str}"
+    return result_str
