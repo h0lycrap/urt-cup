@@ -76,6 +76,8 @@ class ServerRequest(commands.Cog):
 
         # Request to get a server
         server_id = await ftw_client.server_rent(fixture_info['ftw_match_id'], int(server_dcid), server_gametype, server_rcon, server_pass, server_ttl)
+        if server_id is None:
+            raise RuntimeError("Failed to spawn server")
 
         # Wait for server to finish spawning
         server = await ftw_client.server_get_with_id(server_id)
