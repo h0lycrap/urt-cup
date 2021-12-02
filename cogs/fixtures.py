@@ -10,7 +10,7 @@ import flag
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
-from ftwgl import FTWClient
+from ftwgl import FTWClient, MatchType
 
 
 class Fixtures(commands.Cog):
@@ -255,14 +255,32 @@ class Fixtures(commands.Cog):
         # Create text channel 
         fixture_channel = await self.guild.create_text_channel(f"{title}┋{team1['tag']} vs {team2['tag']}", overwrites=overwrites, category=fixture_category)
 
+        def title_to_ftw_match_type(input: str) -> MatchType:
+            if input == 'Quarter Finals':
+                return MatchType.quarter_final
+            elif input == 'Semi Finals':
+                return MatchType.semi_final
+            elif input == 'Silver Final':
+                return MatchType.silver_final
+            elif input == 'Final':
+                return MatchType.grand_final
+            else:
+                return MatchType.group
+
         ftw_client: FTWClient = self.bot.ftw
-        ftw_match_id = await ftw_client.match_create(cup_info['ftw_cup_id'], [team1['ftw_team_id'], team2['ftw_team_id']], )
+        ftw_match_id = await ftw_client.match_create(
+            cup_id=cup_info['ftw_cup_id'],
+            team_ids=[team1['ftw_team_id'], team2['ftw_team_id']],
+            best_of=int(cup_info['format'][2]),
+            match_type=title_to_ftw_match_type(title),
+            match_date=None
+        )
 
         self.bot.cursor.execute("INSERT INTO Fixtures (cup_id, team1, team2, format, channel_id, ftw_match_id) VALUES (%d, %s, %s, %s, %s, %s)", (cup_info['id'], team1['id'], team2['id'], fixture_format, str(fixture_channel.id), ftw_match_id))
         self.bot.conn.commit()
 
         # Print on the log channel
-        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        log_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(content=f"The fixture for the cup ``{cup_info['name']}`` between ``{team1['tag']}`` and ``{team2['tag']}`` has been created.")
 
         # Send fixture card

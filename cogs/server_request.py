@@ -1,5 +1,5 @@
 import random
-from typing import List
+from typing import Dict
 
 import asyncio
 import discord
@@ -51,20 +51,20 @@ class ServerRequest(commands.Cog):
         ftw_client: FTWClient = self.bot.ftw
         servers = await ftw_client.server_locations()
 
-        region_list: List[dropmenus.RegionList] = []
+        region_list: Dict[str, dropmenus.RegionList] = {}
         for server in servers.values():
             r = dropmenus.RegionList()
             r.label = f"{server['name']}, {server['country']}"
             r.emoji = flag.flagize(f":{server['country']}:")
-            r.dcid = server['dcid']
-            region_list.append(r)
+            r.dcid = server['DCID']
+            region_list[r.dcid] = r
 
-        server_region_dropmenu = dropmenus.server_regions(region_list)
+        server_region_dropmenu = dropmenus.server_regions(list(region_list.values()))
 
         # Get server location
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_promptregion'], components=server_region_dropmenu)
         interaction_serverlocation = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "dropmenu_server_region" and i.message.channel.id == interaction.message.channel.id)
-        server_dcid = int(interaction_serverlocation.component[0].value)
+        server_dcid = interaction_serverlocation.component[0].value
 
         # TODO: Allow for a team to select which gametype will be played first
         server_gametype = GameType.team_survivor
@@ -75,7 +75,9 @@ class ServerRequest(commands.Cog):
         server_pass = str(random.randint(111111, 999999))
 
         # Request to get a server
-        server_id = await ftw_client.server_rent(fixture_info['ftw_match_id'], server_dcid, server_gametype, server_rcon, server_pass, server_ttl)
+        server_id = await ftw_client.server_rent(fixture_info['ftw_match_id'], int(server_dcid), server_gametype, server_rcon, server_pass, server_ttl)
+        if server_id is None:
+            raise RuntimeError("Failed to spawn server")
 
         # Wait for server to finish spawning
         server = await ftw_client.server_get_with_id(server_id)
@@ -84,7 +86,7 @@ class ServerRequest(commands.Cog):
             server = await ftw_client.server_get_with_id(server_id)
 
         server_ip = server['config']['ip']
-        await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=server_location[0], location_emoji=server_location[1], ip=server_ip, password=server_pass, rcon=server_rcon, username=user_info['ingame_name']))
+        await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=region_list[server_dcid].label, location_emoji=region_list[server_dcid].emoji, ip=server_ip, password=server_pass, rcon=server_rcon, username=user_info['ingame_name']))
 
 
 def setup(bot):
