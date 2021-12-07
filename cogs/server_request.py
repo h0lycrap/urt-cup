@@ -80,13 +80,14 @@ class ServerRequest(commands.Cog):
             raise RuntimeError("Failed to spawn server")
 
         # Wait for server to finish spawning
-        server = await ftw_client.server_get_with_id(server_id)
-        while 'ip' not in server['config']:
-            await asyncio.sleep(5)
-            server = await ftw_client.server_get_with_id(server_id)
+        game_server = await ftw_client.server_get_with_id(server_id)
+        await game_server.wait_until_setup()
 
-        server_ip = server['config']['ip']
-        await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=region_list[server_dcid].label, location_emoji=region_list[server_dcid].emoji, ip=server_ip, password=server_pass, rcon=server_rcon, username=user_info['ingame_name']))
+        # TODO @h0lycrap setup server as per the next fixture map here
+        game_server.rcon_command("map ut4_turnpike")
+        game_server.rcon_command("exec utcs_fall21_ts")
+
+        await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=region_list[server_dcid].label, location_emoji=region_list[server_dcid].emoji, ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, username=user_info['ingame_name']))
 
 
 def setup(bot):
