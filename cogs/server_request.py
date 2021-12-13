@@ -66,6 +66,9 @@ class ServerRequest(commands.Cog):
         interaction_serverlocation = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "dropmenu_server_region" and i.message.channel.id == interaction.message.channel.id)
         server_dcid = interaction_serverlocation.component[0].value
 
+        await interaction_serverlocation.respond(type=6)
+        await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_started'].format(username=user_info['ingame_name'], location=region_list[server_dcid].label, location_emoji=region_list[server_dcid].emoji))
+
         # TODO: Allow for a team to select which gametype will be played first
         server_gametype = GameType.team_survivor
 
@@ -87,7 +90,7 @@ class ServerRequest(commands.Cog):
         game_server.rcon_command("map ut4_turnpike")
         game_server.rcon_command("exec utcs_fall21_ts")
 
-        await interaction_serverlocation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdServerRequest_success'].format(location=region_list[server_dcid].label, location_emoji=region_list[server_dcid].emoji, ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, username=user_info['ingame_name']))
+        await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_success'].format(ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, hours=server_ttl))
 
 
 def setup(bot):

@@ -271,7 +271,7 @@ class Fixtures(commands.Cog):
         ftw_match_id = await ftw_client.match_create(
             cup_id=cup_info['ftw_cup_id'],
             team_ids=[team1['ftw_team_id'], team2['ftw_team_id']],
-            best_of=int(cup_info['format'][2]),
+            best_of=int(fixture_format[2]),
             match_type=title_to_ftw_match_type(title),
             match_date=None
         )
@@ -818,13 +818,13 @@ class Fixtures(commands.Cog):
         if gamemode == "TS":
             # Start TS pick and ban
             await channel.send(self.bot.quotes['cmdPickBan_TS_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
-            # The ctf advantage team starts to ban
-            team_toban = mapadvantage_ctf
+            # The ts advantage team starts to ban
+            team_toban = mapadvantage_ts
         else:
             # Start CTF pick and ban
             await channel.send(self.bot.quotes['cmdPickBan_CTF_intro'].format(mapadvantage_ctf_role_id=mapadvantage_ctf['role_id'], mapadvantage_ts_role_id=mapadvantage_ts['role_id']))
             # The ctf advantage team starts to ban
-            team_toban = mapadvantage_ts
+            team_toban = mapadvantage_ctf
 
         # Get maps
         self.bot.cursor.execute("SELECT * FROM Maps WHERE gamemode=%s;", (gamemode,))
@@ -989,7 +989,11 @@ class Fixtures(commands.Cog):
         map_embed = embeds.map_list(maps, embed_title)
         await channel.send(embed=map_embed)
 
-        for i in range(2):
+        nb_map_to_remove = 2
+        if fixture_info['format'] == 'BO5':
+            nb_map_to_remove = 1
+
+        for i in range(nb_map_to_remove):
             # Prompt the ban
             pickban_dropmenu = dropmenus.maps(maps, "pickban_draw")
             pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=gamemode_advantage_role.id), components=pickban_dropmenu)
