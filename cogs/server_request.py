@@ -6,7 +6,7 @@ import discord
 import flag
 from discord import channel
 from discord.ext import commands, tasks
-from ftwgl import FTWClient, GameType
+from ftwgl import FTWClient, GameType, gameserver_from_dict
 
 import cogs.common.utils as utils
 import cogs.common.embeds as embeds
@@ -83,13 +83,14 @@ class ServerRequest(commands.Cog):
             raise RuntimeError("Failed to spawn server")
 
         # Wait for server to finish spawning
-        server = await ftw_client.server_get_with_id(server_id)
-        while 'ip' not in server['config']:
-            await asyncio.sleep(5)
-            server = await ftw_client.server_get_with_id(server_id)
+        game_server = gameserver_from_dict(await ftw_client.server_get_with_id(server_id))
+        await game_server.wait_until_setup()
 
-        server_ip = server['config']['ip']
-        await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_success'].format(ip=server_ip, password=server_pass, rcon=server_rcon, hours=server_ttl))
+        # TODO @h0lycrap setup server as per the next fixture map here
+        game_server.rcon_command("map ut4_turnpike")
+        game_server.rcon_command("exec utcs_fall21_ts")
+
+        await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_success'].format(ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, hours=server_ttl))
 
 
 def setup(bot):
