@@ -45,7 +45,7 @@ class Clans(commands.Cog):
 
         elif interaction.component.id == "button_edit_clan":
             # List clans owned by the player
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s;", (user_info['id'],))
+            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s AND admin_managed=0;", (user_info['id'],))
             clans = self.bot.cursor.fetchall()
 
             # Not captain of any clan
@@ -255,7 +255,7 @@ class Clans(commands.Cog):
 
 
 
-    async def createclan(self, user):
+    async def createclan(self, user, admin_managed=0):
         # Flag the user as busy
         self.bot.users_busy.append(user.id)
 
@@ -342,8 +342,8 @@ class Clans(commands.Cog):
         ftw_team_id = await ftw_client.team_create(user.id, teamname, tag)
 
         self.bot.cursor.execute(
-            "INSERT INTO Teams(name, tag, country, captain, role_id, ftw_team_id) VALUES (%s, %s, %s, %s, %s, %s) ;",
-            (teamname, tag, country, captain['id'], team_role.id, ftw_team_id)
+            "INSERT INTO Teams(name, tag, country, captain, role_id, ftw_team_id, admin_managed) VALUES (%s, %s, %s, %s, %s, %s, %s) ;",
+            (teamname, tag, country, captain['id'], team_role.id, ftw_team_id, admin_managed)
         )
         self.bot.conn.commit()
         team_id = self.bot.cursor.lastrowid
@@ -942,6 +942,16 @@ class Clans(commands.Cog):
                             [
                                 Button(style=ButtonStyle.red, label="Delete clan", custom_id=f"button_edit_clan_deleteclan_admin_{clan_to_edit['tag']}")
                             ]])
+
+    @commands.command() 
+    @check.is_guild_manager()
+    async def create_national_team(self, ctx):
+        # Check if user is busy
+        if ctx.author.id in self.bot.users_busy:
+            await ctx.send('You are currently busy with another action with the bot, finish it and try again')
+            return
+        
+        await self.createclan(ctx.author, 1)
 
         
 

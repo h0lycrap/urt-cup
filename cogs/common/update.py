@@ -19,7 +19,7 @@ async def roster(bot):
         if message.embeds[0].title.startswith(":pencil: Clan index"):
             index_message = message
 
-    bot.cursor.execute("SELECT * FROM Teams;")
+    bot.cursor.execute("SELECT * FROM Teams WHERE admin_managed=0;")
     for team in bot.cursor.fetchall():  
 
         # Generate the embed

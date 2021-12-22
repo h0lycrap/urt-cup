@@ -113,7 +113,7 @@ class Fixtures(commands.Cog):
         fixture_format = formats[int(interaction_format.component[0].value)]
 
         # Select title
-        titles = ['Quarter Finals', 'Semi Finals', 'Silver Final', 'Final', 'Other']
+        titles = ['Quarter Finals', 'Semi Finals', 'Bronze Final', 'Final', 'Other']
         droplist_title= dropmenus.formats(titles, "Select a title", "dropmenu_title")
         await interaction_format.respond(type=InteractionType.ChannelMessageWithSource, content="What is the title of this game?", components=droplist_title)
         interaction_title = await self.bot.wait_for("select_option", check = lambda i: i.user.id == interaction.author.id and i.parent_component.id == "dropmenu_title")
@@ -260,7 +260,7 @@ class Fixtures(commands.Cog):
                 return MatchType.quarter_final
             elif input == 'Semi Finals':
                 return MatchType.semi_final
-            elif input == 'Silver Final':
+            elif input == 'Bronze Final':
                 return MatchType.silver_final
             elif input == 'Final':
                 return MatchType.grand_final
