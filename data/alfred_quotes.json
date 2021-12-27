@@ -71,6 +71,8 @@
 	"cmdEditPlayer_update_flag_success" : "Player flag updated.",
 	"cmdEditPlayer_update_flag_log" : "The player ``{playername}``'s flag was changed from {oldflag} to {newflag}",
 
+	"cmdEditPlayer_country_verified_success" : "The player ``{playername}``'s country status is now set to **{status}**",
+
 	"cmdEditPlayer_cancel" : "Player edition canceled.",
 
 	"cmdAddPlayer_error_maxplayer" : "This clan has reached the maximum number of players (12).",

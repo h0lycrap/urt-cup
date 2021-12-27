@@ -64,6 +64,17 @@ class Account(commands.Cog):
                 await self.update_player_flag(player_to_edit, user, interaction)
             elif interaction.component.id.startswith("button_edit_player_delete"):
                 await self.delete_player(player_to_edit, user, interaction)
+            elif interaction.component.id.startswith("button_edit_player_verify_country"):
+                await self.verify_country(player_to_edit, user, interaction)
+
+            if is_admin:
+                # Get the updated player info
+                self.bot.cursor.execute("SELECT * FROM Users WHERE id=%s;", (player_id,))
+                player_to_edit = self.bot.cursor.fetchone()
+
+                player_embed = embeds.player(self.bot, auth=player_to_edit['urt_auth'])
+                editplayer_buttons = self.get_editplayer_buttons(player_to_edit)
+                await interaction.message.edit(embed = player_embed, components=editplayer_buttons)
 
             # Update the roster
             self.bot.async_loop.create_task(update.roster(self.bot))
@@ -208,6 +219,23 @@ class Account(commands.Cog):
         except Exception as e:
             pass
 
+    def get_editplayer_buttons(self, player_to_edit):
+        country_verified_emoji = "\u2714"
+        if player_to_edit['country_verified'] == 0:
+            country_verified_emoji = "\u274C"
+
+        # Get the action to perform
+        return [[
+                    Button(style=ButtonStyle.grey, label="Change player name", custom_id=f"button_edit_player_changename_admin_{player_to_edit['id']}"),
+                    Button(style=ButtonStyle.grey, label="Change auth", custom_id=f"button_edit_player_changeauth_admin_{player_to_edit['id']}"),
+                    Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(player_to_edit['country']), custom_id=f"button_edit_player_changeflag_admin_{player_to_edit['id']}")
+                ],
+                [
+                    Button(style=ButtonStyle.grey, label="Verify country", emoji=country_verified_emoji, custom_id=f"button_edit_player_verify_country_admin_{player_to_edit['id']}"),
+                    Button(style=ButtonStyle.red, label="Delete player", custom_id=f"button_edit_player_deleteplayer_admin_{player_to_edit['id']}")
+                ]]
+
+
     @commands.command() 
     @check.is_guild_manager()
     async def editplayer(self, ctx, player_toedit):
@@ -226,16 +254,10 @@ class Account(commands.Cog):
 
         # Get user's embed
         player_embed = embeds.player(self.bot, auth=player_to_edit['urt_auth'])
+        editplayer_buttons = self.get_editplayer_buttons(player_to_edit)
 
         # Get the action to perform
-        await ctx.send(embed = player_embed, components=[[
-                                Button(style=ButtonStyle.grey, label="Change player name", custom_id=f"button_edit_player_changename_admin_{player_to_edit['id']}"),
-                                Button(style=ButtonStyle.grey, label="Change auth", custom_id=f"button_edit_player_changeauth_admin_{player_to_edit['id']}"),
-                                Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(player_to_edit['country']), custom_id=f"button_edit_player_changeflag_admin_{player_to_edit['id']}")
-                            ],
-                            [
-                                Button(style=ButtonStyle.red, label="Delete player", custom_id=f"button_edit_player_deleteplayer_admin_{player_to_edit['id']}")
-                            ]])
+        await ctx.send(embed = player_embed, components=editplayer_buttons)
 
     async def update_player_name(self, player_toedit, user, interaction): 
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Check your dms!")
@@ -476,6 +498,22 @@ class Account(commands.Cog):
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
             await log_channel.send(self.bot.quotes['cmdDeletePlayerAdmin_prompt_log'].format(playername=player_toedit['ingame_name']))
 
+
+    async def verify_country(self, player_toedit, user, interaction):
+        await interaction.respond(type=6)
+
+        status = "verified"
+        verified = 1
+        if player_toedit['country_verified'] == 1:
+            status = "unverified"
+            verified = 0
+
+        self.bot.cursor.execute("UPDATE Users SET country_verified=%s WHERE id=%s", (verified, player_toedit['id']))
+        self.bot.conn.commit()
+
+        # Print on the log channel
+        log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
+        await log_channel.send(self.bot.quotes['cmdEditPlayer_country_verified_success'].format(playername=player_toedit['ingame_name'], status=status))
         
 
 def setup(bot):

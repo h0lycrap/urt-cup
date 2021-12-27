@@ -96,6 +96,14 @@ class Clans(commands.Cog):
             elif interaction.component.id.startswith("button_edit_clan_changetag"):
                 await self.update_team_tag(clan_to_edit, user, interaction)
 
+            if is_admin:
+                # Get the ypdated team info
+                self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (clan_tag,))
+                clan_to_edit = self.bot.cursor.fetchone()
+
+                clan_embed, _ = embeds.team(self.bot, tag=clan_to_edit['tag'], show_invited=True)
+                await interaction.message.edit(embed = clan_embed, components=self.get_editclan_buttons(clan_to_edit))
+
             # Update the roster
             self.bot.async_loop.create_task(update.roster(self.bot))
             self.bot.async_loop.create_task(update.signups(self.bot))
@@ -902,6 +910,29 @@ class Clans(commands.Cog):
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(self.bot.quotes['cmdUpdateTeamTag_log'].format(teamname=team_toedit['name'], oldtag=team_toedit['tag'], newtag=tag))
 
+
+    def get_editclan_buttons(self, clan_to_edit):
+        return [[
+                    Button(style=ButtonStyle.green, label="Add a player", custom_id=f"button_edit_clan_addplayer_admin_{clan_to_edit['tag']}"),
+                    Button(style=ButtonStyle.blue, label="Remove a player", custom_id=f"button_edit_clan_removeplayer_admin_{clan_to_edit['tag']}"),
+                    Button(style=ButtonStyle.blue, label="Change captain", custom_id=f"button_edit_clan_changecaptain_admin_{clan_to_edit['tag']}"),
+                ],
+                [
+                    Button(style=ButtonStyle.grey, label="Add inactive", custom_id=f"button_edit_clan_addinactive_admin_{clan_to_edit['tag']}"),
+                    Button(style=ButtonStyle.grey, label="Remove inactive", custom_id=f"button_edit_clan_removeinactive_admin_{clan_to_edit['tag']}"),
+                ],
+                [
+                    Button(style=ButtonStyle.grey, label="Change discord", custom_id=f"button_edit_clan_changediscord_admin_{clan_to_edit['tag']}"),
+                    Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(clan_to_edit['country']), custom_id=f"button_edit_clan_changeflag_admin_{clan_to_edit['tag']}")
+                ],
+                [
+                    Button(style=ButtonStyle.grey, label="Change clan name", custom_id=f"button_edit_clan_changename_admin_{clan_to_edit['tag']}"),
+                    Button(style=ButtonStyle.grey, label="Change tag", custom_id=f"button_edit_clan_changetag_admin_{clan_to_edit['tag']}")
+                ],
+                [
+                    Button(style=ButtonStyle.red, label="Delete clan", custom_id=f"button_edit_clan_deleteclan_admin_{clan_to_edit['tag']}")
+                ]]
+
     @commands.command() 
     @check.is_guild_manager()
     async def editclan(self, ctx, clan_toedit):
@@ -922,26 +953,7 @@ class Clans(commands.Cog):
         clan_embed, _ = embeds.team(self.bot, tag=clan_to_edit['tag'], show_invited=True)
 
         # Get the action to perform
-        await ctx.send(embed = clan_embed, components=[[
-                                Button(style=ButtonStyle.green, label="Add a player", custom_id=f"button_edit_clan_addplayer_admin_{clan_to_edit['tag']}"),
-                                Button(style=ButtonStyle.blue, label="Remove a player", custom_id=f"button_edit_clan_removeplayer_admin_{clan_to_edit['tag']}"),
-                                Button(style=ButtonStyle.blue, label="Change captain", custom_id=f"button_edit_clan_changecaptain_admin_{clan_to_edit['tag']}"),
-                            ],
-                            [
-                                Button(style=ButtonStyle.grey, label="Add inactive", custom_id=f"button_edit_clan_addinactive_admin_{clan_to_edit['tag']}"),
-                                Button(style=ButtonStyle.grey, label="Remove inactive", custom_id=f"button_edit_clan_removeinactive_admin_{clan_to_edit['tag']}"),
-                            ],
-                            [
-                                Button(style=ButtonStyle.grey, label="Change discord", custom_id=f"button_edit_clan_changediscord_admin_{clan_to_edit['tag']}"),
-                                Button(style=ButtonStyle.grey, label="Change flag", emoji = flag.flagize(clan_to_edit['country']), custom_id=f"button_edit_clan_changeflag_admin_{clan_to_edit['tag']}")
-                            ],
-                            [
-                                Button(style=ButtonStyle.grey, label="Change clan name", custom_id=f"button_edit_clan_changename_admin_{clan_to_edit['tag']}"),
-                                Button(style=ButtonStyle.grey, label="Change tag", custom_id=f"button_edit_clan_changetag_admin_{clan_to_edit['tag']}")
-                            ],
-                            [
-                                Button(style=ButtonStyle.red, label="Delete clan", custom_id=f"button_edit_clan_deleteclan_admin_{clan_to_edit['tag']}")
-                            ]])
+        await ctx.send(embed = clan_embed, components=self.get_editclan_buttons(clan_to_edit))
 
     @commands.command() 
     @check.is_guild_manager()
