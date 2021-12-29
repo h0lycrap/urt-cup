@@ -148,10 +148,10 @@ def team(bot, tag, show_invited=False):
     return embed, len(accepted_players) < mini_number_players
 
 
-async def team_index(bot):
+async def team_index(bot, admin_managed):
 
     # Fetch teams with a message id not null
-    bot.cursor.execute("SELECT tag, country, roster_message_id FROM Teams WHERE roster_message_id != 'NULL'")
+    bot.cursor.execute("SELECT tag, country, roster_message_id FROM Teams WHERE roster_message_id != 'NULL' and admin_managed=?", (admin_managed,))
     teams = bot.cursor.fetchall()
 
     # Sort the teams alphabetically on letters only
@@ -163,6 +163,9 @@ async def team_index(bot):
 
     # Build embed content
     roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
+    if admin_managed == 1:
+        roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_national_teams_id)
+
     for i, team_info in enumerate(sorted_teams):
         team_tag = team_info['tag']
         team_flag = flag.flagize(team_info['country'])

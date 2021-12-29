@@ -7,8 +7,15 @@ from datetime import datetime, timedelta
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component, interaction
 
 async def roster(bot):
+    await update_roster(bot, 0)
+    await update_roster(bot, 1)
+
+async def update_roster(bot, admin_managed):
     # Get channel
-    roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id) 
+    channel_id  = bot.channel_roster_id
+    if admin_managed == 1:
+        channel_id  = bot.channel_roster_national_teams_id
+    roster_channel = discord.utils.get(bot.guilds[0].channels, id=channel_id) 
 
     # Delete index message if any
     roster_channel_messages = await roster_channel.history(limit=5).flatten()
@@ -19,8 +26,10 @@ async def roster(bot):
         if message.embeds[0].title.startswith(":pencil: Clan index"):
             index_message = message
 
-    bot.cursor.execute("SELECT * FROM Teams WHERE admin_managed=0;")
-    for team in bot.cursor.fetchall():  
+    bot.cursor.execute("SELECT * FROM Teams WHERE admin_managed=?;", (admin_managed,))
+    for team in bot.cursor.fetchall(): 
+        if admin_managed == 1:
+            print(team['name']) 
 
         # Generate the embed
         embed, insuficient_roster = embeds.team(bot, tag=team['tag'])
@@ -50,7 +59,7 @@ async def roster(bot):
             bot.conn.commit()
 
     # Post or edit team index
-    index_embed = await embeds.team_index(bot)
+    index_embed = await embeds.team_index(bot, admin_managed)
     if index_message:
         await index_message.edit(embed=index_embed)
     else:

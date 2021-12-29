@@ -83,7 +83,7 @@ class ServerRequest(commands.Cog):
             raise RuntimeError("Failed to spawn server")
 
         # Wait for server to finish spawning
-        game_server = gameserver_from_dict(await ftw_client.server_get_with_id(server_id))
+        game_server = gameserver_from_dict(await ftw_client.server_get_with_id(server_id), ftw_client)
         await game_server.wait_until_setup()
 
         # TODO @h0lycrap setup server as per the next fixture map here
