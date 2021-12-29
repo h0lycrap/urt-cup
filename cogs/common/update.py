@@ -28,9 +28,6 @@ async def update_roster(bot, admin_managed):
 
     bot.cursor.execute("SELECT * FROM Teams WHERE admin_managed=?;", (admin_managed,))
     for team in bot.cursor.fetchall(): 
-        if admin_managed == 1:
-            print(team['name']) 
-
         # Generate the embed
         embed, insuficient_roster = embeds.team(bot, tag=team['tag'])
 

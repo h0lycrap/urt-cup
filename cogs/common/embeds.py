@@ -200,7 +200,7 @@ async def team_index(bot, admin_managed):
         modules.append([index_str_left, index_str_right])
 
     # Get total number of players in teams
-    bot.cursor.execute("SELECT * FROM Roster")
+    bot.cursor.execute("SELECT * FROM Roster INNER JOIN Teams ON Roster.team_id = Teams.id WHERE Teams.admin_managed = ?", (admin_managed,))
     total_players = bot.cursor.fetchall()
 
     # Create the embed
