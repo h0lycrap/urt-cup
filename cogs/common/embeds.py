@@ -3,12 +3,12 @@ from discord_components import component
 import flag
 import re
 import datetime
+from cogs.common.enums import RosterStatus
 import cogs.common.utils as utils
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component
 
 def player(bot, auth):
-    bot.cursor.execute("SELECT * FROM Users WHERE urt_auth=%s;", (auth,))
-    player = bot.cursor.fetchone()
+    player = bot.db.get_player(urt_auth=auth)
 
     ds_player = discord.utils.get(bot.guilds[0].members, id=int(player['discord_id']))
     embed=discord.Embed(title=f"{flag.flagize(player['country'])} \u200b {player['ingame_name']}", color=0x9b2ab2)
@@ -16,8 +16,7 @@ def player(bot, auth):
     embed.set_thumbnail(url=ds_player.avatar_url)
 
     # Get player's teams
-    bot.cursor.execute("SELECT team_id, accepted FROM Roster WHERE player_id=%s", (player['id'],))
-    teams = bot.cursor.fetchall()
+    teams = bot.db.get_teams_player(player['id'])
 
     # If the player is in no team
     if not teams:
@@ -27,8 +26,7 @@ def player(bot, auth):
         teams_str=""
         for team in teams:
             # Get team country
-            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team['team_id'],))
-            team_info = bot.cursor.fetchone()
+            team_info = bot.db.get_clan(id=team['team_id'])
 
             # If he is a member of the team
             if int(team['accepted']) == 1:
@@ -53,29 +51,26 @@ def team(bot, tag, show_invited=False):
     mini_number_players = 1
 
     # Get the team info
-    bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (tag,))
-    team = bot.cursor.fetchone()
+    team = bot.db.get_clan(tag=tag)
     country = flag.flagize(team['country'])
     #captain = discord.utils.get(bot.guilds[0].members, id=int(team['captain']))
     name = team['name']
     discord_link = team['discord_link']
 
     # Get captain info
-    bot.cursor.execute("SELECT * FROM Users WHERE id=%s", (team['captain'],))
-    captain = bot.cursor.fetchone()
+    captain = bot.db.get_player(id=team['captain'])
 
      # Get the players for each team
-    bot.cursor.execute("SELECT player_id, accepted FROM Roster WHERE team_id = %s;", (team['id'],))
-    players = bot.cursor.fetchall()
+    players = bot.db.get_players_of_team(team['id'])
 
     # Filter out unaccepted invites and check if there are the minimum number of players to display in the roster
-    accepted_players = list(filter(lambda x: x['accepted'] != 0, players))
+    accepted_players = list(filter(lambda x: x['accepted'] != RosterStatus.Invited.value, players))
 
     # Get the members 
-    members = list(filter(lambda x: x['accepted'] == 1 or x['accepted'] == 2, accepted_players))
+    members = list(filter(lambda x: x['accepted'] == RosterStatus.Member.value or x['accepted'] == RosterStatus.Captain.value, accepted_players))
 
     # Get the inactives 
-    inactives= list(filter(lambda x: x['accepted'] == 3, accepted_players))
+    inactives= list(filter(lambda x: x['accepted'] == RosterStatus.Invited.value, accepted_players))
 
     # Get inactive name list
     if len(inactives) == 0:
@@ -85,12 +80,10 @@ def team(bot, tag, show_invited=False):
         for inactive in inactives[:-1]:
 
             # Get inactive info
-            bot.cursor.execute("SELECT * FROM Users Where id=%s", (inactive['player_id'],))
-            inactive_info = bot.cursor.fetchone()
+            inactive_info = bot.db.get_player(id=inactive['player_id'])
             inactive_string += f"{flag.flagize(inactive_info['country'])} {inactive_info['ingame_name']}, "
 
-        bot.cursor.execute("SELECT * FROM Users Where id=%s", (inactives[-1]['player_id'],))
-        inactive_info = bot.cursor.fetchone()
+        inactive_info = bot.db.get_player(id=inactives[-1]['player_id'])
         inactive_string += f"{flag.flagize(inactive_info['country'])} {utils.prevent_discord_formating(inactive_info['ingame_name'])}"
 
 
@@ -104,8 +97,7 @@ def team(bot, tag, show_invited=False):
     for i, player in enumerate(members):
 
         # Get player country flag and urt auth
-        bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player['player_id'],))
-        player_info = bot.cursor.fetchone()
+        player_info = bot.db.get_player(id=player['player_id'])
         if not player_info:
             player_auth_str = "urtauth"
             player_flag_str = ":FR:"
@@ -123,8 +115,7 @@ def team(bot, tag, show_invited=False):
     # Invited players loop
     for i, player in enumerate(invited_players):
         # Get player country flag and urt auth
-        bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player['player_id'],))
-        player_info = bot.cursor.fetchone()
+        player_info = bot.db.get_player(id=player['player_id'])
         if not player_info:
             player_auth_str = "urtauth"
             player_flag_str = ":FR:"
@@ -151,8 +142,7 @@ def team(bot, tag, show_invited=False):
 async def team_index(bot, admin_managed):
 
     # Fetch teams with a message id not null
-    bot.cursor.execute("SELECT tag, country, roster_message_id FROM Teams WHERE roster_message_id != 'NULL' and admin_managed=?", (admin_managed,))
-    teams = bot.cursor.fetchall()
+    teams = bot.db.get_all_clans(admin_managed=admin_managed)
 
     # Sort the teams alphabetically on letters only
     sorted_teams = sorted(teams, key = lambda x: re.sub('[^A-Za-z]+', '', x['tag']).lower())
@@ -200,8 +190,7 @@ async def team_index(bot, admin_managed):
         modules.append([index_str_left, index_str_right])
 
     # Get total number of players in teams
-    bot.cursor.execute("SELECT * FROM Roster INNER JOIN Teams ON Roster.team_id = Teams.id WHERE Teams.admin_managed = ?", (admin_managed,))
-    total_players = bot.cursor.fetchall()
+    total_players = bot.db.get_total_player_teams(admin_managed)
 
     # Create the embed
     embed = discord.Embed(title=f":pencil: Clan index", color=0xFFD700, description="Click on a clan tag to jump to their roster")
@@ -266,15 +255,13 @@ async def team_list(bot, clan_info_list, title, message): # TODO refactor this i
 
 async def signup(bot, cup_id):
     # Get cup info
-    bot.cursor.execute("SELECT * FROM Cups WHERE id=%d", (cup_id,))
-    cup_info = bot.cursor.fetchone()
+    cup_info = bot.db.get_cup(id=cup_id)
     cup_name = cup_info['name']
     signup_start_date = datetime.datetime.strptime(cup_info['signup_start_date'], '%Y-%m-%d %H:%M:%S')
     signup_end_date = datetime.datetime.strptime(cup_info['signup_end_date'], '%Y-%m-%d %H:%M:%S')
 
     # Fetch signed up teams
-    bot.cursor.execute("SELECT team_id FROM Signups WHERE cup_id=%d", (cup_id,))
-    team_ids = bot.cursor.fetchall()
+    team_ids = bot.db.get_cup_signups(cup_id)
 
     team_string = ""
     tag_string = ""
@@ -285,8 +272,7 @@ async def signup(bot, cup_id):
     if team_ids:
         for i, team_id in enumerate(team_ids):
             # Get team info
-            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_id['team_id'],))
-            team_info = bot.cursor.fetchone()
+            team_info = bot.db.get_clan(id=team_id['team_id'])
             team_name = utils.prevent_discord_formating(team_info['name'])
             team_flag = flag.flagize(team_info['country'])
             team_tag_str = utils.prevent_discord_formating(team_info['tag'])
@@ -325,12 +311,8 @@ async def signup(bot, cup_id):
     return embed
 
 async def division(bot, cup_id, div_number):
-    # Get cup info
-    bot.cursor.execute("SELECT * FROM Cups WHERE id=%d", (cup_id,))
-
     # Fetch signed up teams
-    bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d AND div_number=%s", (cup_id, div_number))
-    team_signup_infos = bot.cursor.fetchall()
+    team_signup_infos = bot.db.get_cup_signups(cup_id=cup_id, div_number=div_number)
 
     tag_string = ""
     score_string = ""
@@ -355,8 +337,7 @@ async def division(bot, cup_id, div_number):
 
         for i, team_signup_info in enumerate(team_signup_infos):
             # Get team info
-            bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team_signup_info['team_id'],))
-            team_info = bot.cursor.fetchone()
+            team_info = bot.db.get_clan(id=team_signup_info['team_id'])
             team_name = utils.prevent_discord_formating(team_info['name'])
             team_flag = flag.flagize(team_info['country'])
             team_tag_str = utils.prevent_discord_formating(team_info['tag'])
@@ -403,8 +384,7 @@ def map_list(map_list, title):
 
 async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None, format=None, status=None):
     # Get fixture info
-    bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%s", (fixture_id,))
-    fixture_info = bot.cursor.fetchone()
+    fixture_info = bot.db.get_fixture(id=fixture_id)
     if fixture_info:
         team1_id = fixture_info['team1']
         team2_id = fixture_info['team2']
@@ -415,14 +395,11 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
 
 
     # Get teams info
-    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team1_id,))
-    team1 = bot.cursor.fetchone()
-    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (team2_id,))
-    team2 = bot.cursor.fetchone()
+    team1 = bot.db.get_clan(id=team1_id)
+    team2 = bot.db.get_clan(id=team2_id)
 
     # Get maps info
-    bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id = m.id WHERE f.fixture_id = %s", (fixture_id,))
-    maps = bot.cursor.fetchall()
+    maps = bot.db.get_fixture_maps(fixture_id)
 
     ts_map_string = ""
     ctf_map_string = ""
@@ -487,8 +464,7 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
 
 async def match_index(bot, cup_id, channel):
     # Get fixtures 
-    bot.cursor.execute("SELECT * FROM Fixtures WHERE cup_id=%d", (cup_id,))
-    fixtures = bot.cursor.fetchall()
+    fixtures = bot.db.get_cup_fixtures(cup_id)
 
     #Create embed field content
     fixture_string = "Matches not scheduled \n\n"
@@ -651,8 +627,7 @@ async def match_index(bot, cup_id, channel):
 
 def calendar(bot, cup_info):
     # Get fixtures 
-    bot.cursor.execute("SELECT * FROM Fixtures WHERE cup_id=%d", (cup_info['id'],))
-    fixtures = bot.cursor.fetchall()
+    fixtures = bot.db.get_cup_fixtures(cup_info['id'])
 
     fixture_list = []
     date_list = []
@@ -662,13 +637,8 @@ def calendar(bot, cup_info):
 
         TBD_date = datetime.datetime(2040, 1, 1)
 
-        # Get Team 1 info 
-        bot.cursor.execute("SELECT * FROM Teams WHERE id=%d", (fixture['team1'],))
-        team1 = bot.cursor.fetchone()
-
-        # Get Team 2 info 
-        bot.cursor.execute("SELECT * FROM Teams WHERE id=%d", (fixture['team2'],))
-        team2 = bot.cursor.fetchone()
+        team1 = bot.db.get_clan(id=fixture['team1'])
+        team2 = bot.db.get_clan(id=fixture['team2'])
 
         fixture_list.append([flag.flagize(team1['country']), utils.prevent_discord_formating(team1['tag']), flag.flagize(team2['country']), utils.prevent_discord_formating(team2['tag'])])
 
@@ -763,14 +733,11 @@ def results(bot, fixture_info, match_type):
     date_str = f"{fixture_date} - {fixture_time}"
 
     # Get teams info
-    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team1'],))
-    team1 = bot.cursor.fetchone()
-    bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture_info['team2'],))
-    team2 = bot.cursor.fetchone()
+    team1 = bot.db.get_clan(id=fixture_info['team1'])
+    team2 = bot.db.get_clan(id=fixture_info['team2'])
 
     # Get maps info
-    bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id = m.id WHERE f.fixture_id = %s", (fixture_info['id'],))
-    maps = bot.cursor.fetchall()
+    maps = bot.db.get_fixture_maps(fixture_info['id'])
 
     map_str = ""
     score_str = ""

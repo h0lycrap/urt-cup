@@ -16,10 +16,9 @@ def check_auth(auth):
         return True
 
 # Check if the text is a valid flag emoji
-def check_flag_emoji(cursor, flag_to_check):
+def check_flag_emoji(bot, flag_to_check):
     country = flag.dflagize(flag_to_check)
-    cursor.execute("SELECT id FROM Countries WHERE id = %s;", (country,))
-    return country, cursor.fetchone()
+    return country, bot.db.get_country(id=country)
 
 # Returns true if the input is a date DD/MM/YYYY and also returns the date object
 def check_date_format(date_input):

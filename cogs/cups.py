@@ -22,21 +22,18 @@ class Cups(commands.Cog):
     async def on_button_click(self, interaction):
         user = discord.utils.get(self.guild.members, id=interaction.user.id)
         # Get user info
-        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (user.id,))
-        user_info = self.bot.cursor.fetchone()
+        user_info = self.bot.db.get_player(discord_id=user.id)
 
         # Get the cup to edit
         cup_id = interaction.component.id.split("_")[-1]
         is_admin = interaction.component.id.split("_")[-2] == "admin"
 
         # Get cup info
-        self.bot.cursor.execute("SELECT * FROM Cups WHERE id=%s", (cup_id,))
-        cup_info = self.bot.cursor.fetchone()
+        cup_info = self.bot.db.get_cup(id=cup_id)
 
         if not cup_info:
             # Get cup info from the channel id
-            self.bot.cursor.execute("SELECT * FROM Cups WHERE chan_admin_id=%s", (interaction.message.channel.id,))
-            cup_info = self.bot.cursor.fetchone()
+            cup_info = self.bot.db.get_cup(chan_admin_id=interaction.message.channel.id)
 
         if interaction.component.id.startswith("button_signup_"):
             await self.signup(cup_info, user, user_info, is_admin, interaction)
@@ -46,9 +43,6 @@ class Cups(commands.Cog):
             await self.change_cup_roster_req(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_edit_signupdates"):
             await self.change_cup_signup_dates(cup_info, user, user_info, is_admin, interaction)
-        elif interaction.component.id.startswith("button_delete_cup"):
-            pass
-            #await self.delete_cup(cup_info, user, user_info, is_admin, interaction) Removed temporarilly to avoid big oopsies
         elif interaction.component.id.startswith("button_create_division"):
             await self.create_division(cup_info, user, user_info, is_admin, interaction)
         elif interaction.component.id.startswith("button_add_team_div"):
@@ -231,7 +225,6 @@ class Cups(commands.Cog):
                                 ],
                                 [
                                     Button(style=ButtonStyle.green, label="Create division", custom_id="button_create_division"),
-                                    Button(style=ButtonStyle.red, label="Delete cup", custom_id="button_delete_cup"),
                                 ]])
         await chan_admin.send("Commands to edit the cup fixtures", components=[[
                                     Button(style=ButtonStyle.green, label="Create a fixture", custom_id="button_create_fixture"),
@@ -266,12 +259,7 @@ class Cups(commands.Cog):
             start_date=signup_start_date,
             roster_lock_date=signup_end_date)
 
-        self.bot.cursor.execute(
-            "INSERT INTO Cups (name, mini_roster, signup_start_date, signup_end_date, category_id, chan_admin_id, chan_signups_id, chan_calendar_id, chan_stage_id, category_match_schedule_id, chan_match_index_id, maxi_roster, chan_results_id, ftw_cup_id) "
-            "VALUES (%s, %d,  %s, %s,  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster, chan_results.id, ftw_cup_id))
-        cup_id = self.bot.cursor.lastrowid
-        self.bot.conn.commit()
+        cup_id = self.bot.db.create_cup(name, mini_roster, signup_start_date, signup_end_date, category.id, chan_admin.id, chan_signups.id, chan_calendar.id, chan_stage.id, category_match_schedule.id, chan_match_index.id, maxi_roster, chan_results.id, ftw_cup_id)
 
         # Post index
         #match_index_embed = await embeds.match_index(self.bot, cup_id)
@@ -287,8 +275,7 @@ class Cups(commands.Cog):
     @check.is_guild_manager()
     async def forcesignup(self, ctx, tag):
         # Check if we are in the admin chan of a cup
-        self.bot.cursor.execute("SELECT * FROM Cups WHERE chan_admin_id=%s", (ctx.channel.id,))
-        cup = self.bot.cursor.fetchone()
+        cup = self.bot.db.get_cup(chan_admin_id=ctx.channel.id)
 
         if not cup:
             await ctx.send(self.bot.quotes['cmdForceSignup_error_NoCup'], delete_after=2)
@@ -296,8 +283,7 @@ class Cups(commands.Cog):
             return
 
         # Check if the tag is valid
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s", (tag,))
-        team = self.bot.cursor.fetchone()
+        team = self.bot.db.get_clan(tag=tag)
 
         if not team:
             await ctx.send(self.bot.quotes['cmdForceSignup_error_NoTeam'], delete_after=2)
@@ -305,15 +291,13 @@ class Cups(commands.Cog):
             return
 
         # Check if already signed up
-        self.bot.cursor.execute("SELECT * FROM Signups WHERE team_id=%s and cup_id=%s", (team['id'], cup['id']))
-        if self.bot.cursor.fetchone():
+        if self.bot.db.get_clan_signup(team['id'], cup['id']):
             await ctx.send(self.bot.quotes['cmdForceSignup_error_AlreadySignedUp'], delete_after=2)
             await ctx.message.delete()
             return
 
         # Signup the clan 
-        self.bot.cursor.execute("INSERT INTO Signups (cup_id, team_id) VALUES (%d, %s);", (cup['id'], team['id']))
-        self.bot.conn.commit()
+        self.bot.db.signup_clan(team['id'], cup['id'])
 
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.cup_add_team(team['ftw_team_id'], cup['ftw_cup_id'])
@@ -331,8 +315,7 @@ class Cups(commands.Cog):
     @check.is_guild_manager()
     async def forceremovesignup(self, ctx, tag):
         # Check if we are in the admin chan of a cup
-        self.bot.cursor.execute("SELECT * FROM Cups WHERE chan_admin_id=%s", (ctx.channel.id,))
-        cup = self.bot.cursor.fetchone()
+        cup = self.bot.db.get_cup(chan_admin_id=ctx.channel.id)
 
         if not cup:
             await ctx.send(self.bot.quotes['cmdForceSignup_error_NoCup'], delete_after=2)
@@ -340,8 +323,7 @@ class Cups(commands.Cog):
             return
 
         # Check if the tag is valid
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s", (tag,))
-        team = self.bot.cursor.fetchone()
+        team = self.bot.db.get_clan(tag=tag)
 
         if not team:
             await ctx.send(self.bot.quotes['cmdForceSignup_error_NoTeam'], delete_after=2)
@@ -349,8 +331,7 @@ class Cups(commands.Cog):
             return
 
         # Check if already signed up
-        self.bot.cursor.execute("SELECT * FROM Signups WHERE team_id=%s and cup_id=%s", (team['id'], cup['id']))
-        if not self.bot.cursor.fetchone():
+        if not self.bot.db.get_clan_signup(team['id'], cup['id']):
             await ctx.send(self.bot.quotes['cmdForceRemoveSignup_error_AlreadySignedUp'], delete_after=2)
             await ctx.message.delete()
             return
@@ -369,8 +350,7 @@ class Cups(commands.Cog):
         
         if interaction_confirmation.component.id == 'button_removesignup_yes':
             # Remove clan from signups # TODO : check if remove fixtures too 
-            self.bot.cursor.execute("DELETE FROM Signups WHERE team_id=%s and cup_id=%s", (team['id'], cup['id']))
-            self.bot.conn.commit()
+            self.bot.db.remove_signup_clan(team['id'], cup['id'])
             await ctx.message.delete()
             await confirmation_msg.delete()
             await ctx.send(self.bot.quotes['cmdForceRemoveSignup_success'], delete_after=2)
@@ -407,8 +387,7 @@ class Cups(commands.Cog):
             return
 
         # Update name
-        self.bot.cursor.execute("UPDATE Cups SET name = %s WHERE id=%s", (name, cup_info['id']))
-        self.bot.conn.commit()
+        self.bot.db.edit_cup(id=cup_info['id'], name=name)
 
         # Rename category #TODO: check if need to rename fixtures
         category =  discord.utils.get(self.guild.channels, id=int(cup_info['category_id']))
@@ -471,8 +450,7 @@ class Cups(commands.Cog):
                 self.bot.users_busy.remove(interaction.author.id)
 
         # Update mini roster
-        self.bot.cursor.execute("UPDATE Cups SET mini_roster = %s WHERE id=%s", (mini_roster, cup_info['id']))
-        self.bot.conn.commit()
+        self.bot.db.edit_cup(id=cup_info['id'], mini_roster=mini_roster)
 
         # Delete msgs
         await prompt_msg.delete()
@@ -568,8 +546,7 @@ class Cups(commands.Cog):
         self.bot.users_busy.remove(interaction.author.id)
 
         # Update db
-        self.bot.cursor.execute("UPDATE Cups SET signup_start_date = %s, signup_end_date = %s WHERE id=%s", (signup_start_date, signup_end_date, cup_info['id']))
-        self.bot.conn.commit()
+        self.bot.db.edit_cup(id=cup_info['id'], signup_start_date=signup_start_date, signup_end_date=signup_end_date)
 
         # Delete msgs
         await signup_start_prompt_msg.delete()
@@ -581,61 +558,11 @@ class Cups(commands.Cog):
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(self.bot.quotes['cmdEditCupSignupDates_log'].format(cupname=cup_info['name'], oldsignupdates=f"{cup_info['signup_start_date']} to {cup_info['signup_end_date']}", newsignupdates=f"{signup_start_date} to {signup_end_date}"))
 
-
-    async def delete_cup(self, cup_info, user, user_info, is_admin, interaction):
-        # Ask confirmation
-        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteCup_confirmation'].format(cupname=cup_info['name']), components=[[
-                                    Button(style=ButtonStyle.green, label="Yes", custom_id="button_deletecup_yes"),
-                                    Button(style=ButtonStyle.red, label="No", custom_id="button_deletecup_no"),]])
-        interaction_deletecupconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == user.id and i.component.id.startswith("button_deletecup_"))
-
-        if interaction_deletecupconfirmation.component.id == 'button_deletecup_no':
-            await interaction_deletecupconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteCup_cancel'])
-            return
-        
-        if interaction_deletecupconfirmation.component.id == 'button_deletecup_yes':
-            # Delete chanels 
-            category_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['category_id']))
-            await category_channel.delete()
-            admin_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['chan_admin_id']))
-            await admin_channel.delete()
-            signups_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['chan_signups_id']))
-            await signups_channel.delete()
-            calendar_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['chan_calendar_id']))
-            await calendar_channel.delete()
-            stage_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['chan_stage_id']))
-            await stage_channel.delete()
-            match_index_channel =  discord.utils.get(self.guild.channels, id=int(cup_info['chan_match_index_id']))
-            await match_index_channel.delete()
-            category_match_schedule =  discord.utils.get(self.guild.channels, id=int(cup_info['category_match_schedule_id']))
-            await category_match_schedule.delete()
-
-            # Delete fixtures channel
-            self.bot.cursor.execute("SELECT * FROM Fixtures WHERE cup_id=%s", (cup_info['id'],))
-            for fixture in self.bot.cursor.fetchall():
-                fixture_channel =  discord.utils.get(self.guild.channels, id=int(fixture['channel_id']))
-                await fixture_channel.delete()
-
-
-
-            #Delete in db
-            self.bot.cursor.execute("DELETE FROM Cups WHERE id=%s", (cup_info['id'],))
-            self.bot.conn.commit()
-            self.bot.cursor.execute("DELETE FROM Signups WHERE cup_id=%s", (cup_info['id'],))
-            self.bot.conn.commit()
-            self.bot.cursor.execute("DELETE FROM Divisions WHERE cup_id=%s", (cup_info['id'],))
-            self.bot.conn.commit()
-            self.bot.cursor.execute("DELETE FROM Fixtures WHERE cup_id=%s", (cup_info['id'],))
-            self.bot.conn.commit()
-
-
-
     
     async def signup(self, cup_info, user, user_info, is_admin, interaction):
 
         # List clans owned by the player
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s;", (user_info['id'],))
-        clans_unfiltered = self.bot.cursor.fetchall()
+        clans_unfiltered = self.bot.db.get_teams_of_player(user_info['id'])
 
         # Not captain of any clan
         if not clans_unfiltered:
@@ -645,8 +572,7 @@ class Cups(commands.Cog):
         # Filter out team already signed up 
         clans = []
         for clan in clans_unfiltered:
-            self.bot.cursor.execute("SELECT * FROM Signups WHERE team_id=%s AND cup_id=%s", (clan['id'], cup_info['id']))
-            if self.bot.cursor.fetchone():
+            if self.bot.db.get_clan_signup(clan['id'], cup_info['id']):
                 continue
             else:
                 clans.append(clan)
@@ -661,8 +587,7 @@ class Cups(commands.Cog):
         clan_tosignup = clans[int(interaction_signupteam.component[0].value)]
 
         # Check if the roster is sufficient
-        self.bot.cursor.execute("SELECT player_id FROM Roster WHERE team_id=%s AND (accepted= 1 OR accepted = 2)", (clan_tosignup['id'],))
-        players_of_team = self.bot.cursor.fetchall()
+        players_of_team = self.bot.db.get_active_team_players(clan_tosignup['id'])
         if len(players_of_team) < cup_info['mini_roster']:
             await interaction_signupteam.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSignup_error_miniroster'].format(mini_roster=cup_info['mini_roster']))
             return
@@ -671,18 +596,15 @@ class Cups(commands.Cog):
             return
 
         # Check if there are any already registered members
-        self.bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%s", (cup_info['id'],))
-        clans_registered = self.bot.cursor.fetchall()
+        clans_registered = self.bot.db.get_cup_signups(cup_info['id'])
         overlapping_player_list_string = ""
         for clan_registered in clans_registered:
             # Get clan roster
-            self.bot.cursor.execute("SELECT player_id FROM Roster WHERE team_id=%s AND (accepted= 1 OR accepted = 2)", (clan_registered['team_id'],))
-            clan_roster_list = self.bot.cursor.fetchall()
+            clan_roster_list = self.bot.db.get_active_team_players(clan_registered['id'])
             for player_in_roster in clan_roster_list:
                 if player_in_roster in players_of_team:
                     # Get player info
-                    self.bot.cursor.execute("SELECT * FROM Users WHERE id=%s", (player_in_roster['player_id'],))
-                    overlapping_player_info = self.bot.cursor.fetchone()
+                    overlapping_player_info = self.bot.db.get_player(id=player_in_roster['player_id'])
                     if len(overlapping_player_list_string) > 0:
                         overlapping_player_list_string += ", "
                     overlapping_player_list_string += overlapping_player_info['ingame_name']
@@ -702,8 +624,7 @@ class Cups(commands.Cog):
         
         if interaction_signupteamconfirmation.component.id == 'button_signupteam_yes':
             # Signup the clan and notify
-            self.bot.cursor.execute("INSERT INTO Signups (cup_id, team_id) VALUES (%d, %s);", (cup_info['id'], clan_tosignup['id']))
-            self.bot.conn.commit()
+            self.bot.db.signup_clan(clan_tosignup['id'], cup_info['id'])
 
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.cup_add_team(clan_tosignup['ftw_team_id'], cup_info['ftw_cup_id'])
@@ -717,8 +638,7 @@ class Cups(commands.Cog):
     async def create_division(self, cup_info, user, user_info, is_admin, interaction):
 
         # Get how many divisions have been created
-        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s", (cup_info['id'],))
-        divisions = self.bot.cursor.fetchall()
+        divisions = self.bot.db.get_cup_divisions(cup_info['id'])
         div_number = len(divisions) + 1
 
         # Create div match schedule category
@@ -728,8 +648,7 @@ class Cups(commands.Cog):
         category_archive = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
 
         # Add division in the DB
-        self.bot.cursor.execute("INSERT INTO Divisions (div_number, cup_id, category_id, archive_category_id) VALUES (%s, %s, %s, %s)", (div_number, cup_info['id'], category_match_schedule.id, category_archive.id))
-        self.bot.conn.commit()
+        self.bot.db.create_division(div_number, cup_info['id'], category_match_schedule.id, category_archive.id)
 
         # Add division edit message in the admin channel
         chan_admin = discord.utils.get(self.guild.channels, id=int(cup_info['chan_admin_id']))
@@ -751,8 +670,7 @@ class Cups(commands.Cog):
         div_number = interaction.component.id.split("_")[-1]
 
         # Get which team to add
-        self.bot.cursor.execute("SELECT * FROM Signups s INNER JOIN Teams t ON s.team_id = t.id WHERE s.cup_id = %s and div_number IS NULL", (cup_info['id'],))
-        teams_signedup = self.bot.cursor.fetchall()
+        teams_signedup = self.bot.db.get_teams_nodiv_from_cup(cup_info['id'])
 
         if not teams_signedup:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No teams to add")
@@ -775,8 +693,7 @@ class Cups(commands.Cog):
         
         if interaction_addteamdivconfirmation.component.id == 'button_addteamdiv_yes':
             # Insert team into table
-            self.bot.cursor.execute("UPDATE Signups SET div_number = %s WHERE team_id = %s AND cup_id=%s", (div_number, team_to_add['id'], cup_info['id']))
-            self.bot.conn.commit()
+            self.bot.db.edit_signups(cup_info['id'], team_to_add['id'], div_number)
 
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.cup_set_team_division(cup_info['ftw_cup_id'], team_to_add['ftw_team_id'], div_number)
@@ -791,8 +708,7 @@ class Cups(commands.Cog):
         div_number = interaction.component.id.split("_")[-1]
 
         # Get which team to remove
-        self.bot.cursor.execute("SELECT * FROM Signups s INNER JOIN Teams t ON s.team_id = t.id WHERE s.cup_id = %s and div_number=%s", (cup_info['id'], div_number))
-        teams_in_div = self.bot.cursor.fetchall()
+        teams_in_div = self.bot.db.get_cup_signups(cup_info['id'], div_number)
 
         if not teams_in_div:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No teams to remove")
@@ -815,8 +731,7 @@ class Cups(commands.Cog):
         
         if interaction_addteamdivconfirmation.component.id == 'button_removeteamdiv_yes':
             # Remove team from div
-            self.bot.cursor.execute("UPDATE Signups SET div_number = %s WHERE team_id = %s AND cup_id=%s", (None, team_to_remove['id'], cup_info['id']))
-            self.bot.conn.commit()
+            self.bot.db.edit_signups(cup_info['id'], team_to_remove['id'], div_number=0)
 
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.cup_set_team_division(cup_info['ftw_cup_id'], team_to_remove['ftw_team_id'], None)
@@ -831,8 +746,7 @@ class Cups(commands.Cog):
         div_number = interaction.component.id.split("_")[-1]
 
         # Get which team to edit
-        self.bot.cursor.execute("SELECT * FROM Signups s INNER JOIN Teams t ON s.team_id = t.id WHERE s.cup_id = %s and div_number=%s", (cup_info['id'], div_number))
-        teams_in_div = self.bot.cursor.fetchall()
+        teams_in_div = self.bot.db.get_teams_in_div(self, cup_info['id'], div_number)
 
         if not teams_in_div:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="No teams to edit")
@@ -902,8 +816,7 @@ class Cups(commands.Cog):
                     self.bot.users_busy.remove(interaction.author.id)
 
             # Update points
-            self.bot.cursor.execute("UPDATE Signups SET win = %s, draw=%s, loss=%s, points=%s WHERE cup_id=%s and team_id=%s", (win, draw, loss, points, cup_info['id'], team_to_edit['id']))
-            self.bot.conn.commit()
+            self.bot.db.edit_signup(cup_id=cup_info['id'], team_id=team_to_edit['id'], win=win, draw=draw, loss=loss, points=points)
 
             # Delete msgs
             await prompt_msg.delete()
@@ -913,13 +826,6 @@ class Cups(commands.Cog):
     async def delete_division(self, cup_info, user, user_info, is_admin, interaction):
         # Get the division
         div_number = interaction.component.id.split("_")[-1]
-
-        # Get div info
-        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s and div_number=%s", (cup_info['id'], div_number))
-        div_info = self.bot.cursor.fetchone()
-
-        # Get category
-        #match_category = discord.utils.get(self.guild.categories, id=int(div_info['category_id']))
 
         # Ask confirmation
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteDiv_confirmation'].format(div_number=div_number), components=[[
@@ -934,13 +840,8 @@ class Cups(commands.Cog):
         if interaction_deletedivconfirmation.component.id == 'button_deletediv_yes':
             await interaction_deletedivconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeleteDiv_success'].format(div_number=div_number))
 
-            # Delete game channels
-            #for chan in match_category.channels:
-            #    await chan.delete()
-
             # Delete div embed
-            self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s AND div_number=%s", (cup_info['id'], div_number))
-            div_to_delete = self.bot.cursor.fetchone()
+            div_to_delete = self.bot.db.get_division(div_number=div_number, cup_id=cup_info['id'])
             signup_channel = discord.utils.get(self.guild.channels, id=int(cup_info['chan_stage_id']))
             division_message = await signup_channel.fetch_message(div_to_delete['embed_id'])
             await division_message.delete()
@@ -949,17 +850,14 @@ class Cups(commands.Cog):
             await interaction.message.delete()
 
             # Delete div from div table
-            self.bot.cursor.execute("DELETE FROM Divisions WHERE cup_id=%s AND div_number=%s", (cup_info['id'], div_number))
-            self.bot.conn.commit()
+            self.bot.db.delete_division(cup_info['id'], div_number)
 
             # Delete div from signups
-            self.bot.cursor.execute("SELECT * FROM Signups s INNER JOIN Teams t ON s.team_id = t.id WHERE s.cup_id = %s and div_number=%s", (cup_info['id'], div_number))
-            teams_in_div = self.bot.cursor.fetchall()
+            teams_in_div = self.bot.db.get_teams_in_div(self, cup_info['id'], div_number)
             
             for team_in_div in teams_in_div:
                 # Remove team from div
-                self.bot.cursor.execute("UPDATE Signups SET div_number = %s, win = %s, draw = %s, loss = %s, points= %s WHERE team_id = %s AND cup_id=%s", (None, None, None, None, None, team_in_div['id'], cup_info['id']))
-                self.bot.conn.commit()
+                self.bot.db.edit_signup(cup_info['id'], team_in_div['id'], div_number=0, win=0, draw=0, loss=0, points=0)
 
             # Notify and  log
             log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)

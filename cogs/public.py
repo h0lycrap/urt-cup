@@ -2,6 +2,7 @@
 from discord.ext import commands
 import discord
 import cogs.common.embeds as embeds
+from cogs.common.enums import FixtureStatus
 import cogs.common.update as update
 import cogs.common.check as check
 
@@ -32,11 +33,13 @@ class Public(commands.Cog):
         elif args.startswith("<@") and args.endswith(">"):
             args = args[2:-1] 
 
-        self.bot.cursor.execute("SELECT tag, country, captain, roster_message_id, name FROM Teams WHERE tag=%s;", (args,))
-        team = self.bot.cursor.fetchone()
+        team = self.bot.db.get_clan(tag=args)
+        player = self.bot.db.get_player(discord_id=args)
+        if player == None:
+            player = self.bot.db.get_player(urt_auth=args)
+        if player == None:
+            player = self.bot.db.get_player(ingame_name=args)
 
-        self.bot.cursor.execute("SELECT discord_id, urt_auth, ingame_name, country FROM Users WHERE discord_id=%s OR urt_auth=%s OR ingame_name=%s;", (args, args, args))
-        player = self.bot.cursor.fetchone()
 
         if not team and not player:
             await ctx.send(self.bot.quotes['cmdInfo_error_doesntexist'])
@@ -66,8 +69,7 @@ class Public(commands.Cog):
     async def notscheduled(self, ctx):
         print('coucou')
         # Get fixtures 
-        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE status IS NULL")
-        fixtures = self.bot.cursor.fetchall()
+        fixtures = self.bot.db.get_fixtures_of_status(self, FixtureStatus.Created)
 
         #Create embed field content
         fixture_string = "Matches not scheduled \n\n"

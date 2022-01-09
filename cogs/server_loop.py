@@ -1,6 +1,7 @@
 import discord
 from discord import channel
 from discord.ext import commands, tasks
+from cogs.common.enums import FixtureStatus
 import cogs.common.utils as utils
 import cogs.common.embeds as embeds
 import cogs.common.update as update
@@ -41,8 +42,7 @@ class ServerLoop(commands.Cog):
         if interaction.component.id.startswith("button_problem_"):
             # Get fixture
             fixture_id = interaction.component.id.split("_")[-1]
-            self.bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%s", (fixture_id,))
-            fixture = self.bot.cursor.fetchone()
+            fixture = self.bot.db.get_fixture(id=fixture_id)
             await self.refresh_fixture_status(interaction.message, fixture)
 
             if interaction.component.id.startswith("button_problem_fixed"):
@@ -56,8 +56,7 @@ class ServerLoop(commands.Cog):
 
     async def check_upload_status(self):
         # Get all fixtures with status completed
-        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE status=3")
-        fixtures = self.bot.cursor.fetchall()
+        fixtures = self.bot.db.get_fixtures_of_status(FixtureStatus.Finished)
 
         for fixture in fixtures:
             # Get fixture problems
@@ -73,8 +72,7 @@ class ServerLoop(commands.Cog):
             #    continue
 
             # Update fixture status to missing files
-            self.bot.cursor.execute("Update Fixtures SET status=4 WHERE id=%s", (fixture['id'],))
-            self.bot.conn.commit()
+            self.bot.db.edit_fixture(fixture['id'], status=FixtureStatus.ScoresEntered)
 
             # Post to the demo log channel
             demolog_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_demolog_id)
@@ -87,12 +85,7 @@ class ServerLoop(commands.Cog):
 
     async def archive_fixture(self, fixture):
         # Update fixture status to archived
-        self.bot.cursor.execute("Update Fixtures SET status=5 WHERE id=%s", (fixture['id'],))
-        self.bot.conn.commit()
-
-        # Get cup info
-        self.bot.cursor.execute("SELECT * FROM Cups WHERE id=%s", (fixture['cup_id'],))
-        cup_info = self.bot.cursor.fetchone()
+        self.bot.db.edit_fixture(fixture['id'], status=FixtureStatus.Archived)
 
         # Get div number
         fixture_channel = discord.utils.get(self.guild.channels, id=int(fixture['channel_id']))
@@ -102,8 +95,7 @@ class ServerLoop(commands.Cog):
             div_number = 2 
 
         # Get div info
-        self.bot.cursor.execute("SELECT * FROM Divisions WHERE cup_id=%s and div_number=%s", (fixture['cup_id'], div_number))
-        div_info = self.bot.cursor.fetchone()
+        div_info = self.bot.db.get_division(cup_id=fixture['cup_id'], div_number=div_number)
 
         # Archive fixture channel
         archive_category = discord.utils.get(self.guild.categories, id=int(div_info['archive_category_id']))
@@ -111,25 +103,20 @@ class ServerLoop(commands.Cog):
         # Check if category is full
         if len(archive_category.channels) >= 50:
             archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
-            self.bot.cursor.execute("UDPATE Divisions SET archive_category_id=%s WHERE id=%s", (archive_category.id, div_info['id']))
-            self.bot.conn.commit()
+            self.bot.db.edit_division(id=div_info['id'], archive_category_id=archive_category.id)
 
         await fixture_channel.edit(category=archive_category)
 
     def get_fixture_problems(self, fixture):
         # Get all the players that played
-        self.bot.cursor.execute("SELECT * FROM FixturePlayer WHERE fixture_id=%s", (fixture['id'],))
-        playersPlayed = self.bot.cursor.fetchall()
+        playersPlayed = self.bot.db.get_fixture_players(fixture_id=fixture['id'])
 
         # Get teams info
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture['team1'],))
-        team1_info = self.bot.cursor.fetchone()
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture['team2'],))
-        team2_info = self.bot.cursor.fetchone()
+        team1_info = self.bot.db.get_clan(id=fixture['team1'])
+        team2_info = self.bot.db.get_clan(id=fixture['team2'])
 
         # Get maps info
-        self.bot.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id=m.id WHERE fixture_id=%s", (fixture['id'],))
-        maps_played = self.bot.cursor.fetchall()
+        maps_played = self.bot.db.get_fixture_maps(fixture_id=fixture['id'])
 
         # Get the number of hours since the game was played
         gamedate = datetime.date.fromisoformat(fixture['date'].split()[0])
@@ -154,8 +141,7 @@ class ServerLoop(commands.Cog):
                 continue
 
             # There is a pb, get player and team info
-            self.bot.cursor.execute("SELECT * FROM Users AS u INNER JOIN Roster AS r ON u.id = r.player_id INNER JOIN Teams AS t ON r.team_id = t.id WHERE u.id = %s AND (t.id = %s OR t.id = %s)", (playerPlayed['player_id'], fixture['team1'], fixture['team2']))
-            playerteam_info = self.bot.cursor.fetchone()
+            playerteam_info = self.bot.db.get_clan_player_from_fixture(playerPlayed['player_id'], fixture['team1'], fixture['team2'])
 
             if not playerteam_info:
                 print(playerPlayed, fixture)
@@ -177,11 +163,9 @@ class ServerLoop(commands.Cog):
 
             # Update db
             if mossOk and not int(playerPlayed['uploaded_moss']):
-                self.bot.cursor.execute("UPDATE FixturePlayer SET uploaded_moss = 1 WHERE player_id=%s and fixture_id=%s", (playerPlayed['player_id'], fixture['id']))
-                self.bot.conn.commit()
+                self.bot.db.edit_fixture_player(player_id=playerPlayed['player_id'], fixture_id=fixture['id'], uploaded_moss=1)
             if demoOk and not int(playerPlayed['uploaded_demo']):
-                self.bot.cursor.execute("UPDATE FixturePlayer SET uploaded_demo = 1 WHERE player_id=%s and fixture_id=%s", (playerPlayed['player_id'], fixture['id']))
-                self.bot.conn.commit()
+                self.bot.db.edit_fixture_player(player_id=playerPlayed['player_id'], fixture_id=fixture['id'], uploaded_demo=1)
 
             if mossOk and demoOk:
                 continue
@@ -272,16 +256,13 @@ class ServerLoop(commands.Cog):
 
         elif interaction_fixproblemconfirmation.component.id == 'button_fixproblem_yes':
             # Get player id
-            self.bot.cursor.execute("SELECT * FROM Users WHERE urt_auth=%s", (problem_player,))
-            user_info = self.bot.cursor.fetchone()
+            user_info = self.bot.db.get_player(urt_auth=problem_player)
 
             # Set document as uploaded
             if problem_type == "Moss":
-                self.bot.cursor.execute("UPDATE FixturePlayer SET uploaded_moss = 1 WHERE player_id=%s and fixture_id=%s", (user_info['id'], fixture['id']))
-                self.bot.conn.commit()
+                self.bot.db.edit_fixture_player(player_id=user_info['id'], fixture_id=fixture['id'], uploaded_moss=1)
             elif problem_type == "Demo":
-                self.bot.cursor.execute("UPDATE FixturePlayer SET uploaded_demo = 1 WHERE player_id=%s and fixture_id=%s", (user_info['id'], fixture['id']))
-                self.bot.conn.commit()
+                self.bot.db.edit_fixture_player(player_id=user_info['id'], fixture_id=fixture['id'], uploaded_demo=1)
 
             # Refresh problem
             await self.refresh_fixture_status(interaction.message, fixture)
@@ -301,8 +282,7 @@ class ServerLoop(commands.Cog):
                 continue
 
             # Get fixture
-            self.bot.cursor.execute("SELECT * FROM Fixtures WHERE id=%s", (fixture_id,))
-            fixture = self.bot.cursor.fetchone()
+            fixture = self.bot.db.get_fixture(id=fixture_id)
 
             # refresh fixture
             await self.refresh_fixture_status(message, fixture)
@@ -314,10 +294,8 @@ class ServerLoop(commands.Cog):
         problems, deltahours, problem_list, dm_list = self.get_fixture_problems(fixture)
 
         # Get teams info
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture['team1'],))
-        team1_info = self.bot.cursor.fetchone()
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE id=%s", (fixture['team2'],))
-        team2_info = self.bot.cursor.fetchone()
+        team1_info = self.bot.db.get_clan(id=fixture['team1'])
+        team2_info = self.bot.db.get_clan(id=fixture['team2'])
 
         players_not_on_discord = ""
         for dm in dm_list:
@@ -325,8 +303,7 @@ class ServerLoop(commands.Cog):
             player_todm = discord.utils.get(self.guild.members, id=int(dm[0]))
             if not player_todm:
                 # Get missing player info
-                self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id=%s", (dm[0],))
-                player_info = self.bot.cursor.fetchone()
+                player_info = self.bot.db.get_player(discord_id=dm[0])
                 players_not_on_discord += f"``{player_info['urt_auth']}`` "
                 continue
 

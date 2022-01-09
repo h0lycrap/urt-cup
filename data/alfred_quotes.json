@@ -242,6 +242,7 @@
 
 	"cmdSchedule_admin_success" : "Game scheduled.",
 
+	"cmdSchedule_error_cantschedule" : "Error match can't be scheduled.",
 	"cmdSchedule_error_notinteam" : "Only a member of the team ``{otherteamname}`` can respond.",
 	"cmdSchedule_accepted" : "The game is now scheduled.",
 	"cmdSchedule_accepted_success" : "The clan ``{teamname}`` accepted the invitation. \n<@&{otherroleid}> <@&{roleid}> The game is now scheduled on ``{gamedate}`` at ``{gametime} UTC``.",
@@ -257,8 +258,11 @@
 	"cmdPickBanInvitation_error_notscheduled" : "You need to schedule the game first.",
 	"cmdPickBanInvitation_error_finished" : "The game is already on going or is over.",
 	"cmdPickBanInvitation_prompt" : "The pick and ban process is about to start, make sure you have done your knife fight beforehand. The winner chooses whether they want the ban advantage (the last ban) in TS or in CTF. The winner also chooses which map/gamemode is played first. The loser has the advantage of the ban (the last ban) in the other gamemode. Take turns eliminating a map until there is only one left (do it a second time for the other gamemode).\n**Which team won the knife fight?** Both teams need to click to start the process.",
-
 	"cmdPickBanDrawInvitation_prompt" : "The pick and ban process for the last map is about to start, make sure you have done your knife fight beforehand. The winner chooses whether they want to chose the game mode or the map. If they chose the game mode, they will also ban the first two maps. The other team will chose the map that will be played from the remaining list.\n**Which team won the knife fight?** Both teams need to click to start the process.",
+	"cmdPickBanInvitation_utwc_intro" : "The pick and ban process is about to start, each team will pick their gamemodes, make sure to do a knife fight before or after picking gamemodes.",
+	"cmdPickBanInvitation_utwc_draw" : "The pick and ban process for the last map is about to start, make sure you have done your knife fight beforehand. The winner will have the last ban between the remaining **TS** maps",
+	"cmdPickBanInvitation_utwc_same_gamemode" : "Both teams picked **{gamemode}**. The knife fight winner will ban last.",
+	"cmdPickBanInvitation_utwc_diff_gamemode" : "``{team1}`` picked **{gamemode1}** and ``{team2}`` picked **{gamemode2}**. The knife fight winner will decide which map is played first.",
 
 	"cmdPickBan_error_wrong_team_click" : "Only a member of the clan ``{teamname}`` can respond.",
 	"cmdPickBan_gamemode_advantage_prompt" : "<@&{team1_role_id}> For which gamemode do you want to have the ban advantage (the ability to pick between the last two maps)?",
@@ -270,12 +274,14 @@
 	"cmdPickBan_pick_success" : "The map ``{mapname}`` in **{gamemode}** will be played.",
 	"cmdPickBan_bo2_end" : "You can now start the game, the team ``{teamname}`` will choose which gamemode is played first. The game is ``{tsmap}`` **TS** and ``{ctfmap}`` **CTF**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
 	"cmdPickBan_bo5_end" : "You can now start the game, the team ``{teamname}`` will choose which gamemode is played first, and the loser of each game choses the next map. The game is ``{tsmap1}``, ``{tsmap2}`` **TS** and ``{ctfmap1}``, ``{ctfmap2}`` **CTF**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
+	"cmdPickBan_bo3_utcw_same_gamemode_end" : "You can now start the game, the team ``{teamname}`` will choose which map is played first. The game is ``{map1}``, ``{map2}`` **{gamemode}**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>.\n\n GL & HF!",
 	"cmdPickBan_confirmation" : "Are you sure you want to **ban** the map ``{mapname}``?",
 	"cmdPickBan_pick_confirmation" : "Are you sure you want to **PICK** the map ``{mapname}``? This means that this map **WILL BE PLAYED**." ,
 	"cmdPickBan_Prompt_draw" : "In case of a draw, click on the button below and follow the instructions.",
 	"cmdPickBanDraw_gamemode_advantage_prompt" : "<@&{team1_role_id}> Do you want to be able to chose the gamemode or the map?",
 	"cmdPickBanDraw_gamemode_prompt" : "<@&{gamemode_role}> Which gamemode will be the last map?",
 	"cmdPickBan_draw_end" : "The last map will be ``{map}`` **{gamemode}**. GL&HF!",
+	"cmdPickBanInvitation_utwc_gamemode" : "<@&{team_role_id}> pick your gamemode:",
 
 	"cmdEnterScores_error_notsetup" : "The match is not setup yet, or the maps haven't been entered, you can't enter scores.",
 	"cmdEnterScores_error_equal" : "Scores can't be equal with overtime.",

@@ -27,8 +27,7 @@ class ServerRequest(commands.Cog):
     async def on_button_click(self, interaction):
         user = discord.utils.get(self.guild.members, id=interaction.user.id)
         # Get user info
-        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (user.id,))
-        user_info = self.bot.cursor.fetchone()
+        user_info = self.bot.db.get_player(discord_id=user.id)
 
         if interaction.component.id.startswith("button_fixture_requestserver"):
             await self.request_server(interaction, user_info)
@@ -36,8 +35,7 @@ class ServerRequest(commands.Cog):
     # Request a server for a game
     async def request_server(self, interaction, user_info):
         # Get  feature  
-        self.bot.cursor.execute("SELECT * FROM Fixtures WHERE channel_id=%s", (interaction.message.channel.id,))
-        fixture_info = self.bot.cursor.fetchone()
+        fixture_info = self.bot.db.get_fixture(channel_id=interaction.message.channel.id)
 
         '''
         # Check if we are match day

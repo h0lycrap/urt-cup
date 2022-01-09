@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from cogs.common.enums import RosterStatus
 import cogs.common.utils as utils
 import cogs.common.embeds as embeds
 import cogs.common.update as update
@@ -22,14 +23,11 @@ class Clans(commands.Cog):
     @commands.Cog.listener() 
     async def on_button_click(self, interaction):
         user = discord.utils.get(self.guild.members, id=interaction.user.id)
-        # Get user info
-        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (user.id,))
-        user_info = self.bot.cursor.fetchone()
+        user_info = self.bot.db.get_player(discord_id=user.id)
 
         if interaction.component.id == "button_create_clan":
             # Check if the user already created 3 clans
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain=%s", (user_info['id'], ))
-            clans_created = self.bot.cursor.fetchall()
+            clans_created = self.bot.db.get_teams_of_player(user_info['id'])
             if len(clans_created) >= 3:
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='You already created at least 3 clans, contact an admin if you want to delete one of them.')
                 return
@@ -45,8 +43,7 @@ class Clans(commands.Cog):
 
         elif interaction.component.id == "button_edit_clan":
             # List clans owned by the player
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s AND admin_managed=0;", (user_info['id'],))
-            clans = self.bot.cursor.fetchall()
+            clans = self.bot.db.get_teams_of_player(user_info['id'], admin_managed=0)
 
             # Not captain of any clan
             if not clans:
@@ -65,12 +62,10 @@ class Clans(commands.Cog):
             if is_admin and not user.guild_permissions.manage_guild:
                 return
 
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE tag = %s;", (clan_tag,))
-            clan_to_edit = self.bot.cursor.fetchone()
+            clan_to_edit = self.bot.db.get_clan(tag=clan_tag)
 
             # Check if the clan is signed up for a cup
-            self.bot.cursor.execute("SELECT * FROM Signups WHERE team_id = %s;", (clan_to_edit['id'],))
-            if self.bot.cursor.fetchone() and not is_admin:
+            if self.bot.db.clan_in_active_cup(clan_to_edit['id']) and not is_admin:
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdEditClan_error_blocked_edit'])
                 return
 
@@ -98,11 +93,9 @@ class Clans(commands.Cog):
 
             if is_admin:
                 # Get the ypdated team info
-                self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (clan_tag,))
-                clan_to_edit = self.bot.cursor.fetchone()
-
-                clan_embed, _ = embeds.team(self.bot, tag=clan_to_edit['tag'], show_invited=True)
-                await interaction.message.edit(embed = clan_embed, components=self.get_editclan_buttons(clan_to_edit))
+                clan_edited = self.bot.db.get_clan(tag=clan_tag)
+                clan_embed, _ = embeds.team(self.bot, tag=clan_edited['tag'], show_invited=True)
+                await interaction.message.edit(embed = clan_embed, components=self.get_editclan_buttons(clan_edited))
 
             # Update the roster
             self.bot.async_loop.create_task(update.roster(self.bot))
@@ -110,12 +103,10 @@ class Clans(commands.Cog):
 
         elif interaction.component.id == "button_leave_clan":
             # List clans where the player is
-            self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id = %s AND (accepted=1 OR accepted=3);", (user_info['id'],))
-            clans = self.bot.cursor.fetchall()
+            clans = self.bot.db.get_teams_player_member_inactive(user_info['id'])
             clan_infos = []
             for clan in clans:
-                self.bot.cursor.execute("SELECT * FROM Teams WHERE id = %s;", (clan['team_id'],))
-                clan_infos.append(self.bot.cursor.fetchone())
+                clan_infos.append(self.bot.db.get_clan(id=clan['team_id']))
 
             # Cant leave any clan 
             if not clans:
@@ -128,13 +119,10 @@ class Clans(commands.Cog):
         elif interaction.component.id.startswith("button_invite_"):
             # Get the clan to edit
             clan_id = interaction.component.id.split("_")[-1]
-
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE id = %s;", (clan_id,))
-            team_toedit = self.bot.cursor.fetchone()
+            team_toedit = self.bot.db.get_clan(id=clan_id)
 
             # Get captain info
-            self.bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (team_toedit['captain'],))
-            captain_info = self.bot.cursor.fetchone()
+            captain_info = self.bot.db.get_player(id=team_toedit['captain'])
             captain = discord.utils.get(self.guild.members, id=int(captain_info['discord_id']))
 
             # Disable invite buttons
@@ -144,16 +132,13 @@ class Clans(commands.Cog):
             #                            Button(style=ButtonStyle.red, label="Decline", custom_id="button_invite_decline", disabled=True),]])
 
             # Check if the player was still invited
-            self.bot.cursor.execute("SELECT id FROM Roster WHERE accepted=0 AND team_id = %s AND player_id=%s;", (team_toedit['id'], user_info['id']))
-            if not self.bot.cursor.fetchone():
+            if not self.bot.db.get_roster_member(user_info['id'], team_toedit['id'], accepted=RosterStatus.Invited):
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddPlayer_nolongerinvited'].format(teamname=team_toedit['name']))
                 return
 
             # Accepted invite
             if interaction.component.id.startswith("button_invite_accept"):
-                self.bot.cursor.execute("UPDATE Roster SET accepted=1 WHERE  team_id = %s AND player_id=%s;", (team_toedit['id'], user_info['id']))
-                self.bot.conn.commit()
-
+                self.bot.db.update_roster_status(RosterStatus.Member, user_info['id'], team_toedit['id'])
                 ftw_client: FTWClient = self.bot.ftw
                 await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], user_info['discord_id'], UserTeamRole.member)
 
@@ -172,8 +157,7 @@ class Clans(commands.Cog):
             # Declined invite
             elif interaction.component.id.startswith("button_invite_decline"):
                 await captain.send(self.bot.quotes['cmdAddPlayer_declined_cap'].format(name=user_info['ingame_name'], teamname=team_toedit['name']))
-                self.bot.cursor.execute("DELETE FROM Roster WHERE  team_id = %s AND player_id=%s;", (team_toedit['id'], user_info['id']))
-                self.bot.conn.commit()
+                self.bot.db.delete_player_from_roster(user_info['id'], team_id=team_toedit['id'])
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, ephemeral=False, content=self.bot.quotes['cmdAddPlayer_declined'].format(teamname=team_toedit['name']))
 
                 # Print on the log channel
@@ -187,14 +171,8 @@ class Clans(commands.Cog):
         
         if interaction.parent_component.id == "dropmenu_teamtoedit":
             user = discord.utils.get(self.guild.members, id=interaction.user.id)
-            # Get user info
-            self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (interaction.user.id,))
-            user_info = self.bot.cursor.fetchone()
-
-            # Get user's clan
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s;", (user_info['id'],))
-            clans = self.bot.cursor.fetchall()
-
+            user_info = self.bot.db.get_player(discord_id=interaction.user.id)
+            clans = self.bot.db.get_teams_of_player(user_info['id'])
             clan_to_edit = clans[int(interaction.component[0].value)]
             clan_embed, _ = embeds.team(self.bot, tag=clan_to_edit['tag'], show_invited=True)
 
@@ -219,18 +197,10 @@ class Clans(commands.Cog):
 
         if interaction.parent_component.id == "dropmenu_teamtoleave":
             user = discord.utils.get(self.guild.members, id=interaction.user.id)
-            # Get user info
-            self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s;", (interaction.user.id,))
-            user_info = self.bot.cursor.fetchone()
-
-            # Get user's clan
-            self.bot.cursor.execute("SELECT * FROM Roster WHERE player_id = %s AND (accepted=1 OR accepted=3);", (user_info['id'],))
-            clans = self.bot.cursor.fetchall()
+            user_info = self.bot.db.get_player(discord_id=interaction.user.id)
+            clans = self.bot.db.get_teams_player_member_inactive(user_info['id'])
             clan_to_leave = clans[int(interaction.component[0].value)]
-
-            # Get clan info
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE id = %s", (clan_to_leave['team_id'],))
-            clan_info = self.bot.cursor.fetchone()
+            clan_info = self.bot.db.get_clan(id=clan_to_leave['team_id'])
 
             # Ask confirmation
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_confirmation'].format(clanname=clan_info['name']), components=[[
@@ -242,9 +212,7 @@ class Clans(commands.Cog):
                 await interaction_leaveclanconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdLeaveClan_cancel'])
                 return
             if interaction_leaveclanconfirmation.component.id == 'button_leaveclan_yes':
-                #Leave the clan
-                self.bot.cursor.execute("DELETE FROM Roster WHERE player_id=%s AND team_id=%s", (user_info['id'], clan_info['id']))
-                self.bot.conn.commit()
+                self.bot.db.delete_player_from_roster(user_info['id'], clan_info['id'])
 
                 # Remove team role from player
                 player_leaving = discord.utils.get(self.guild.members, id=int(user_info['discord_id']))
@@ -289,9 +257,8 @@ class Clans(commands.Cog):
             if utils.emojis_in(teamname_msg.content.strip()) or len(teamname_msg.content.strip()) > 50:
                 await user.send("Invalid entry, too long or includes emoji, try again.")
                 continue
-
-            self.bot.cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname,))   
-            if self.bot.cursor.fetchone():
+  
+            if self.bot.db.get_clan(name=teamname):
                 await user.send(self.bot.quotes['cmdCreateClan_error_name'])
             else:
                 name_checked = True
@@ -314,9 +281,8 @@ class Clans(commands.Cog):
             if utils.emojis_in(tag_msg.content.strip()) or len(tag_msg.content.strip()) > 50:
                 await user.send("Invalid entry, too long or includes emoji, try again.")
                 continue
-
-            self.bot.cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag,))   
-            if self.bot.cursor.fetchone():
+ 
+            if self.bot.db.get_clan(tag=tag):
                 await user.send(self.bot.quotes['cmdCreateClan_error_tag'])
             else:
                 tag_checked = True
@@ -326,7 +292,7 @@ class Clans(commands.Cog):
         while not country_checked:
             await user.send(self.bot.quotes['cmdCreateClan_prompt_flag'])
             country_msg = await self.bot.wait_for('message', check=check)
-            country, country_checked = utils.check_flag_emoji(self.bot.cursor, country_msg.content.strip())
+            country, country_checked = utils.check_flag_emoji(self.bot, country_msg.content.strip())
 
             # Cancel team creation
             if country_msg.content.strip().lower() == '!cancel':
@@ -342,26 +308,18 @@ class Clans(commands.Cog):
         team_role = await self.guild.create_role(name=tag, mentionable=True)
 
         # Get captain info
-        self.bot.cursor.execute("SELECT * FROM Users WHERE discord_id=%s", (user.id,))
-        captain = self.bot.cursor.fetchone()
+        captain = self.bot.db.get_player(discord_id=user.id)
 
         # Add team to DB
         ftw_client: FTWClient = self.bot.ftw
         ftw_team_id = await ftw_client.team_create(user.id, teamname, tag)
-
-        self.bot.cursor.execute(
-            "INSERT INTO Teams(name, tag, country, captain, role_id, ftw_team_id, admin_managed) VALUES (%s, %s, %s, %s, %s, %s, %s) ;",
-            (teamname, tag, country, captain['id'], team_role.id, ftw_team_id, admin_managed)
-        )
-        self.bot.conn.commit()
-        team_id = self.bot.cursor.lastrowid
+        team_id = self.bot.db.create_clan(teamname, tag, country, captain['id'], team_role.id, ftw_team_id, admin_managed)
 
         # Add captain to team roster accepted=2 means captain
         captain_ds = discord.utils.get(self.guild.members, id=int(user.id))
         captain_role = discord.utils.get(self.guild.roles, id=int(self.bot.role_captains_id))
         await captain_ds.add_roles(captain_role, team_role)
-        self.bot.cursor.execute("INSERT INTO Roster(team_id, player_id, accepted) VALUES (%s, %s, %d) ;", (team_id, captain['id'], 2))
-        self.bot.conn.commit()
+        self.bot.db.create_roster_member(team_id, captain['id'], RosterStatus.Captain)
 
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.team_add_user_or_update_role(ftw_team_id, captain['discord_id'], UserTeamRole.leader)
@@ -382,13 +340,6 @@ class Clans(commands.Cog):
     async def add_player(self, team_toedit, user, interaction, is_admin=False):
         # Flag the user as busy
         self.bot.users_busy.append(user.id)
-        
-        # Check if the max number of players per clan has been reached
-        #self.bot.cursor.execute("SELECT * FROM Roster WHERE team_id = %s;", (team_toedit['id'],))
-        #players_inclan = self.bot.cursor.fetchall()
-        #if len(players_inclan) >= self.bot.max_players_per_team:
-        #    await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdAddPlayer_error_maxplayer'])
-        #    return
 
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Check your dms!")
 
@@ -420,15 +371,13 @@ class Clans(commands.Cog):
             auth = auth.strip()
 
             # Check if the auth is registered
-            self.bot.cursor.execute("SELECT * FROM Users WHERE urt_auth = %s;", (auth,))
-            player_toadd = self.bot.cursor.fetchone()
+            player_toadd = self.bot.db.get_player(urt_auth=auth)
             if not player_toadd:
                 await user.send(self.bot.quotes['cmdAddPlayer_error_auth'].format(auth=auth))
                 continue
 
             # Check if user was already invited
-            self.bot.cursor.execute("SELECT * FROM Roster WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_toadd['id']))
-            if self.bot.cursor.fetchone():
+            if self.bot.db.get_roster_member(player_toadd['id'], team_toedit['id']):
                 await user.send(self.bot.quotes['cmdAddPlayer_error_alreadyinvited'].format(name=player_toadd['ingame_name']))
                 continue 
 
@@ -439,9 +388,7 @@ class Clans(commands.Cog):
                 continue
 
             # Add player to roster
-            self.bot.cursor.execute("INSERT INTO Roster(team_id, player_id) VALUES (%s, %s) ;", (team_toedit['id'], player_toadd['id']))
-            self.bot.conn.commit()
-
+            self.bot.db.create_roster_member(team_toedit['id'], player_toadd['id'], RosterStatus.Invited)
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRole.invited)
 
@@ -463,8 +410,7 @@ class Clans(commands.Cog):
             # If admin, force add
             else:
                 player_topm = discord.utils.get(self.guild.members, id=int(player_toadd['discord_id']))
-                self.bot.cursor.execute("UPDATE Roster SET accepted=1 WHERE  team_id = %s AND player_id=%s;", (team_toedit['id'], player_toadd['id']))
-                self.bot.conn.commit()
+                self.bot.db.update_roster_status(RosterStatus.Member, player_toadd['id'], team_toedit['id'])
 
                 ftw_client: FTWClient = self.bot.ftw
                 await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_toadd['discord_id'], UserTeamRole.member)
@@ -484,7 +430,6 @@ class Clans(commands.Cog):
 
 
     async def remove_player(self, team_toedit, user, interaction):
-
         # Get which player to remove
         player_info_list, dropmenu_playertoremove = dropmenus.players_of_team(self.bot, team_toedit['id'], "dropmenu_player_to_remove", include_invited=True, include_inactive=True)
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Which player do you want to remove from your clan?", components=dropmenu_playertoremove)
@@ -502,10 +447,7 @@ class Clans(commands.Cog):
             return
         
         if interaction_removeplayerconfirmation.component.id == 'button_removeplayer_yes':
-            # Remove player from roster
-            self.bot.cursor.execute("DELETE FROM Roster WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_toremove['id']))
-            self.bot.conn.commit()
-
+            self.bot.db.delete_player_from_roster(player_toremove['id'], team_toedit['id'])
             await interaction_removeplayerconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdDeletePlayer_success'].format(name=player_toremove['ingame_name']))
 
             # Remove team role from player
@@ -548,8 +490,7 @@ class Clans(commands.Cog):
         
         if interaction_addinactiveconfirmation.component.id == 'button_addinactive_yes':
             # Set as inactive
-            self.bot.cursor.execute("UPDATE Roster SET accepted = 3 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_addinactive['id']))
-            self.bot.conn.commit()
+            self.bot.db.update_roster_status(RosterStatus.Inactive, player_addinactive['id'], team_toedit['id'])
 
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRole.inactive)
@@ -593,8 +534,7 @@ class Clans(commands.Cog):
         
         if interaction_removeinactiveconfirmation.component.id == 'button_removeinactive_yes':
             # Remove as inactive
-            self.bot.cursor.execute("UPDATE Roster SET accepted = 1 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], player_addinactive['id']))
-            self.bot.conn.commit()
+            self.bot.db.update_roster_status(RosterStatus.Member, player_addinactive['id'], team_toedit['id'])
 
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], player_addinactive['discord_id'], UserTeamRole.member)
@@ -637,8 +577,7 @@ class Clans(commands.Cog):
                 self.bot.users_busy.remove(user.id)
                 return
 
-            self.bot.cursor.execute("SELECT id FROM Countries WHERE id = %s;", (serialized_country,))
-            if not self.bot.cursor.fetchone():
+            if not self.bot.db.get_country(id=serialized_country):
                 await user.send(self.bot.quotes['cmdRegister_error_country'])
             else:
                 country_checked = True
@@ -646,9 +585,7 @@ class Clans(commands.Cog):
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Teams SET country=%s WHERE tag=%s", (serialized_country, team_toedit['tag']))
-        self.bot.conn.commit()
-
+        self.bot.db.edit_clan(team_toedit['tag'], country=serialized_country)
         await user.send(self.bot.quotes['cmdUpdateFlag_success'])
 
         # Print on the log channel
@@ -685,9 +622,7 @@ class Clans(commands.Cog):
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Teams SET discord_link=%s WHERE tag=%s", (link, team_toedit['tag']))
-        self.bot.conn.commit()
-
+        self.bot.db.edit_clan(team_toedit['tag'], discord_link=link)
         await user.send(self.bot.quotes['cmdUpdateDiscordLink_success'])
 
         # Print on the log channel
@@ -720,28 +655,21 @@ class Clans(commands.Cog):
         
         if interaction_changecaptainconfirmation.component.id == 'button_changecaptain_yes':
             # Change clan captain
-            self.bot.cursor.execute("UPDATE Roster SET accepted=2 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], new_captain['id']))
-            self.bot.conn.commit()
-
+            self.bot.db.update_roster_status(RosterStatus.Captain, player_id=new_captain['id'], team_id=team_toedit['id'])
             ftw_client: FTWClient = self.bot.ftw
             await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRole.leader)
-
-            self.bot.cursor.execute("UPDATE Teams SET captain=%s WHERE tag = %s ;", (new_captain['id'], team_toedit['tag']))
-            self.bot.conn.commit()
+            self.bot.db.edit_clan(team_toedit['tag'], captain=new_captain['id'])
 
             # Get prev captain info
-            self.bot.cursor.execute("SELECT * FROM Users WHERE id=%s", (team_toedit['captain'],))
-            prev_captain_info = self.bot.cursor.fetchone()
+            prev_captain_info = self.bot.db.get_player(id=team_toedit['captain'])
             # Remove captain role if the captain is no longer captain of any team
             prev_captain = discord.utils.get(self.guild.members, id=int(prev_captain_info['discord_id']))
-            self.bot.cursor.execute("UPDATE Roster SET accepted=1 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], team_toedit['captain']))
-            self.bot.conn.commit()
+            self.bot.db.update_roster_status(RosterStatus.Member, player_id=team_toedit['captain'], team_id=team_toedit['id'])
             await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_captain['discord_id'], UserTeamRole.member)
 
             # Remove captain discord role for previous captain if not captain of any clan
             captain_role = discord.utils.get(self.guild.roles, id=self.bot.role_captains_id)
-            self.bot.cursor.execute("SELECT * FROM Roster WHERE accepted=2 AND player_id=%s;", (team_toedit['captain'],))
-            if not self.bot.cursor.fetchone():
+            if not self.bot.db.get_teams_of_player(team_toedit['captain']):
                 await prev_captain.remove_roles(captain_role)
 
             await interaction_changecaptainconfirmation.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeCaptain_success'].format(name=new_captain['ingame_name']))
@@ -767,10 +695,7 @@ class Clans(commands.Cog):
         
         if interaction_deleteclan.component.id == 'button_deleteclan_yes':
             # Remove roster message
-            self.bot.cursor.execute("SELECT roster_message_id FROM Teams WHERE tag = %s;", (team_toedit['tag'],))
-            roster_message_id = self.bot.cursor.fetchone()
-
-            # Get channel and remove message
+            roster_message_id = self.bot.db.get_clan(tag=team_toedit['tag'])
             roster_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_roster_id)
             try:
                 roster_message = await roster_channel.fetch_message(roster_message_id['roster_message_id'])
@@ -786,28 +711,15 @@ class Clans(commands.Cog):
                 print(e)
 
             # Delete clan
-            self.bot.cursor.execute("DELETE FROM Teams WHERE tag = %s;", (team_toedit['tag'],))
-            self.bot.conn.commit()
-
-            # Delete from roster
-            self.bot.cursor.execute("DELETE FROM Roster WHERE team_id = %s;", (team_toedit['id'],))
-            self.bot.conn.commit()
-
-            # Delete from signups
-            self.bot.cursor.execute("DELETE FROM Signups WHERE team_id = %s;", (team_toedit['id'],))
-            self.bot.conn.commit()
-
-            
+            self.bot.db.delete_team(team_toedit['id'])
 
             # Get prev captain info
-            self.bot.cursor.execute("SELECT * FROM Users WHERE id=%s", (team_toedit['captain'],))
-            prev_captain_info = self.bot.cursor.fetchone()
+            prev_captain_info = self.bot.db.get_player(id=team_toedit['captain'])
             # Remove captain role if the captain is no longer captain of any team
             prev_captain = discord.utils.get(self.guild.members, id=int(prev_captain_info['discord_id']))
             if prev_captain:
                 captain_role = discord.utils.get(self.guild.roles, id=int(self.bot.role_captains_id))
-                self.bot.cursor.execute("SELECT id FROM Roster WHERE accepted=2 AND player_id=%s", (prev_captain_info['id'],))
-                if not self.bot.cursor.fetchone():
+                if not self.bot.db.get_teams_of_player(team_toedit['captain']):
                     await prev_captain.remove_roles(captain_role)
 
             # Notify
@@ -843,18 +755,15 @@ class Clans(commands.Cog):
             if utils.emojis_in(teamname_msg.content.strip()) or len(teamname_msg.content.strip()) > 50:
                 await user.send("Invalid entry, too long or includes emoji, try again.")
                 continue
-
-            self.bot.cursor.execute("SELECT id FROM Teams WHERE name = %s", (teamname,))   
-            if self.bot.cursor.fetchone():
+ 
+            if self.bot.db.get_clan(name=teamname):
                 await user.send(self.bot.quotes['cmdCreateClan_error_name'])
             else:
                 name_checked = True
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Teams SET name=%s WHERE tag=%s", (teamname, team_toedit['tag']))
-        self.bot.conn.commit()
-
+        self.bot.editclan(tag=team_toedit['tag'], name=teamname)
         await user.send(self.bot.quotes['cmdUpdateTeamName_success'])
 
         # Print on the log channel
@@ -888,16 +797,14 @@ class Clans(commands.Cog):
                 await user.send("Invalid entry, too long or includes emoji, try again.")
                 continue
 
-            self.bot.cursor.execute("SELECT id FROM Teams WHERE tag = %s", (tag,))   
-            if self.bot.cursor.fetchone():
+            if self.bot.db.get_clan(tag=tag):
                 await user.send(self.bot.quotes['cmdCreateClan_error_tag'])
             else:
                 tag_checked = True
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Teams SET tag=%s WHERE tag=%s", (tag, team_toedit['tag']))
-        self.bot.conn.commit()
+        self.bot.db.edit_clan(tag=tag)
 
         # Edit role name
         team_role = discord.utils.get(self.guild.roles, id=int(team_toedit['role_id']))
@@ -942,8 +849,7 @@ class Clans(commands.Cog):
             return
 
         # Get the team info
-        self.bot.cursor.execute("SELECT * FROM Teams WHERE tag=%s;", (clan_toedit,))
-        clan_to_edit = self.bot.cursor.fetchone()
+        clan_to_edit = self.bot.db.get_clan(tag=clan_toedit)
 
         if not clan_to_edit:
             await ctx.send(self.bot.quotes['cmdEditClan_admin_error_tag'])

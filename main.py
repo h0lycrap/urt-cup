@@ -9,6 +9,7 @@ import asyncio
 import cogs.common.update as update
 import cogs.common.check as check
 from ftwgl import FTWClient
+from database import Database
 
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption
@@ -20,14 +21,15 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 bot.remove_command('help')
 
 # Connect to DB
-bot.conn = mariadb.connect(
+bot.db = Database("dev", os.getenv('DBIP'), os.getenv('DBPASSWORD'), os.getenv('DBNAME'))
+'''bot.conn = mariadb.connect(
         user="dev",
         password=os.getenv('DBPASSWORD'),
         host=os.getenv('DBIP'),
         port=3306,
         database=os.getenv('DBNAME')
     )
-bot.cursor = bot.conn.cursor(dictionary=True)
+bot.cursor = bot.conn.cursor(dictionary=True)'''
 
 bot.ftw = FTWClient(
     ftw_api_key=os.getenv("FTW_API_KEY"),
@@ -85,9 +87,9 @@ bot.urtli_pass = os.getenv('urtli_pass')
 @bot.event
 async def on_member_join(member):
     #Check if user is already registered and rename them if yes
-    bot.cursor.execute("SELECT ingame_name FROM Users WHERE discord_id = %s", (member.id,))   
-    for name in bot.cursor:
-        await member.edit(nick=name['ingame_name'])
+    user_info = bot.db.get_player(discord_id=member.id)
+    if user_info:
+        await member.edit(nick=user_info['ingame_name'])
         return
 
     await member.add_roles(discord.utils.get(bot.guilds[0].roles, id=bot.role_unregistered_id))
@@ -95,8 +97,7 @@ async def on_member_join(member):
 @bot.event
 async def on_member_remove(member):
     #Get user info
-    bot.cursor.execute("SELECT * FROM Users WHERE discord_id = %s", (member.id,)) 
-    user_info = bot.cursor.fetchone()
+    user_info = bot.db.get_player(discord_id=member.id)
     log_channel =  discord.utils.get(bot.guilds[0].channels, id=bot.channel_log_id)
     if user_info:
         await log_channel.send(f":exclamation: {user_info['ingame_name']} [``{user_info['urt_auth']}``] left the discord")

@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from cogs.common.enums import RosterStatus
 import cogs.common.utils as utils
 import cogs.common.embeds as embeds
 import cogs.common.check as check
@@ -30,8 +31,7 @@ class Account(commands.Cog):
 
         if interaction.component.id == "button_register":
             # Check if user is already registered
-            self.bot.cursor.execute("SELECT urt_auth FROM Users WHERE discord_id = %s;", (interaction.user.id,)) 
-            if self.bot.cursor.fetchone():
+            if self.bot.db.get_player(discord_id=interaction.user.id):
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content='User already registered')
                 return
             
@@ -52,8 +52,7 @@ class Account(commands.Cog):
             if is_admin and not user.guild_permissions.manage_guild:
                 return
 
-            self.bot.cursor.execute("SELECT * FROM Users WHERE id = %s;", (player_id,))
-            player_to_edit = self.bot.cursor.fetchone()
+            player_to_edit = self.bot.db.get_player(id=player_id)
 
             # Launch the action
             if interaction.component.id.startswith("button_edit_player_changename"):
@@ -69,11 +68,9 @@ class Account(commands.Cog):
 
             if is_admin:
                 # Get the updated player info
-                self.bot.cursor.execute("SELECT * FROM Users WHERE id=%s;", (player_id,))
-                player_to_edit = self.bot.cursor.fetchone()
-
-                player_embed = embeds.player(self.bot, auth=player_to_edit['urt_auth'])
-                editplayer_buttons = self.get_editplayer_buttons(player_to_edit)
+                player_edited = self.bot.db.get_player(id=player_id)
+                player_embed = embeds.player(self.bot, auth=player_edited['urt_auth'])
+                editplayer_buttons = self.get_editplayer_buttons(player_edited)
                 await interaction.message.edit(embed = player_embed, components=editplayer_buttons)
 
             # Update the roster
@@ -90,8 +87,7 @@ class Account(commands.Cog):
             return
 
         # Check if auth is already registered
-        self.bot.cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth,))   
-        if self.bot.cursor.fetchone():
+        if self.bot.db.get_player(urt_auth=auth):
             await ctx.send(self.bot.quotes['cmdRegister_error_authalreadyreg'])
             return
 
@@ -99,21 +95,19 @@ class Account(commands.Cog):
             await ctx.send(self.bot.quotes['cmdRegister_error_authdoesntexist'])
             return
 
-        # Check if ingame name is already taken
-        self.bot.cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (name,))   
-        if self.bot.cursor.fetchone():
+        # Check if ingame name is already taken 
+        if self.bot.db.get_player(ingame_name=name):
             await ctx.send(self.bot.quotes['cmdRegister_error_nametaken'])
             return
 
-        country, country_checked = utils.check_flag_emoji(self.bot.cursor, flag)
+        country, country_checked = utils.check_flag_emoji(self.bot, flag)
 
         if not country_checked:
             await ctx.send(self.bot.quotes['cmdRegister_error_country'])
             return
 
         # Add user to DB and remove unregistered role
-        self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
-        self.bot.conn.commit()
+        self.bot.db.create_player(user.id, auth, name, country)
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.user_create_or_update(user.id, auth, name)
         await ctx.send(self.bot.quotes['cmdRegister_success'])
@@ -153,9 +147,8 @@ class Account(commands.Cog):
             auth_msg = await self.bot.wait_for('message', check=check)
             auth = auth_msg.content.strip()
 
-            # Check if auth is already registered
-            self.bot.cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth,))   
-            if self.bot.cursor.fetchone():
+            # Check if auth is already registered 
+            if self.bot.db.get_player(urt_auth=auth):
                 await user.send(self.bot.quotes['cmdRegister_error_authalreadyreg'])
                 continue
             
@@ -180,8 +173,7 @@ class Account(commands.Cog):
                 continue
 
             # Check if ingame name is already taken
-            self.bot.cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (name,))   
-            if self.bot.cursor.fetchone():
+            if self.bot.db.get_player(ingame_name=name):
                 await user.send(self.bot.quotes['cmdRegister_error_nametaken'])
             else:
                 name_checked = True
@@ -191,14 +183,13 @@ class Account(commands.Cog):
         while not country_checked:
             await user.send(self.bot.quotes['cmdRegister_prompt_country'])
             country_msg = await self.bot.wait_for('message', check=check)
-            country, country_checked = utils.check_flag_emoji(self.bot.cursor, country_msg.content.strip())
+            country, country_checked = utils.check_flag_emoji(self.bot, country_msg.content.strip())
 
             if not country_checked:
                 await user.send(self.bot.quotes['cmdRegister_error_country'])
 
         # Add user to DB and remove unregistered role
-        self.bot.cursor.execute("INSERT INTO Users(discord_id, urt_auth, ingame_name, country) VALUES (%s, %s, %s, %s) ;", (user.id, auth, name, country))
-        self.bot.conn.commit()
+        self.bot.db.create_player(user.id, auth, name, country)
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.user_create_or_update(user.id, auth, name)
 
@@ -245,8 +236,7 @@ class Account(commands.Cog):
             return
 
         # Get the player info
-        self.bot.cursor.execute("SELECT * FROM Users WHERE urt_auth=%s;", (player_toedit,))
-        player_to_edit = self.bot.cursor.fetchone()
+        player_to_edit = self.bot.db.get_player(urt_auth=player_toedit)
 
         if not player_to_edit:
             await ctx.send(self.bot.quotes['cmdEditPlayer_admin_error_auth'])
@@ -286,19 +276,15 @@ class Account(commands.Cog):
                 await user.send("Invalid entry, too long or includes emoji, try again.")
                 continue
 
-            # Check if ingame name is already taken
-            self.bot.cursor.execute("SELECT discord_id FROM Users WHERE ingame_name = %s", (playername,))   
-            if self.bot.cursor.fetchone():
+            # Check if ingame name is already taken 
+            if self.bot.db.get_player(ingame_name=playername):
                 await user.send(self.bot.quotes['cmdRegister_error_nametaken'])
             else:
                 name_checked = True
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Users SET ingame_name=%s WHERE id=%s", (playername, player_toedit['id']))
-        self.bot.conn.commit()
-        self.bot.async_loop.create_task(update.roster(self.bot))
-
+        self.bot.db.edit_player(player_toedit['id'], ingame_name=playername)
         ftw_client: FTWClient = self.bot.ftw
         await ftw_client.user_create_or_update(player_toedit['discord_id'], playername, player_toedit['urt_auth'])
 
@@ -346,17 +332,15 @@ class Account(commands.Cog):
                 await user.send(self.bot.quotes['cmdRegister_error_authdoesntexist'])
                 continue
 
-            # Check if auth is already taken
-            self.bot.cursor.execute("SELECT discord_id FROM Users WHERE urt_auth = %s", (auth,))   
-            if self.bot.cursor.fetchone():
+            # Check if auth is already taken 
+            if self.bot.db.get_player(urt_auth=auth):
                 await user.send(self.bot.quotes['cmdRegister_error_authalreadyreg'])
             else:
                 auth_checked = True
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Users SET urt_auth=%s WHERE id=%s", (auth, player_toedit['id']))
-        self.bot.conn.commit()
+        self.bot.db.edit_player(player_toedit['id'], urt_auth=auth)
         self.bot.async_loop.create_task(update.roster(self.bot))
 
         ftw_client: FTWClient = self.bot.ftw
@@ -391,8 +375,7 @@ class Account(commands.Cog):
                 await user.send(self.bot.quotes['cmdEditPlayer_update_flag_cancel'])
                 return
 
-            self.bot.cursor.execute("SELECT id FROM Countries WHERE id = %s;", (serialized_country,))
-            if not self.bot.cursor.fetchone():
+            if not self.bot.db.get_country(id=serialized_country):
                 await user.send(self.bot.quotes['cmdRegister_error_country'])
             else:
                 country_checked = True
@@ -400,8 +383,7 @@ class Account(commands.Cog):
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.cursor.execute("UPDATE Users SET country=%s WHERE id=%s", (serialized_country, player_toedit['id']))
-        self.bot.conn.commit()
+        self.bot.db.edit_player(player_toedit['id'], country=serialized_country)
 
         await user.send(self.bot.quotes['cmdEditPlayer_update_flag_success'])
 
@@ -420,45 +402,31 @@ class Account(commands.Cog):
             return
         
         if interaction_deleteplayeradmin.component.id == 'button_deleteplayer_admin_yes':
-            # Remove from Users base 
-            self.bot.cursor.execute("DELETE FROM Users WHERE id = %s;", (player_toedit['id'],))
-            self.bot.conn.commit()
-
-            # Remove from Roster 
-            self.bot.cursor.execute("DELETE FROM Roster WHERE player_id = %s;", (player_toedit['id'],))
-            self.bot.conn.commit()
+            # Remove from db 
+            self.bot.db.delete_player(player_toedit['id'])
+            self.bot.db.delete_player_from_roster(player_toedit['id'])
 
             # Get the teams the player was captain of
-            self.bot.cursor.execute("SELECT * FROM Teams WHERE captain = %s;", (player_toedit['id'],))
-            teams_owned = self.bot.cursor.fetchall()
+            teams_owned = self.bot.db.get_teams_of_player(player_toedit['id'])
 
             for team_toedit in teams_owned:
 
                 # Check if there are any players left on the team
-                self.bot.cursor.execute("SELECT * FROM Roster WHERE team_id = %s;", (team_toedit['id'],))
-                new_cap_id = self.bot.cursor.fetchone()
+                new_cap_id = self.bot.db.get_players_of_team(team_toedit['id'])[0]
 
                 # Name new captain
                 if new_cap_id:
-                    self.bot.cursor.execute("UPDATE Roster SET accepted=2 WHERE team_id = %s AND player_id=%s;", (team_toedit['id'], new_cap_id['player_id']))
-                    self.bot.conn.commit()
-
+                    self.bot.db.update_roster_status(RosterStatus.Captain, new_cap_id['player_id'], team_toedit['id'])
+                    self.bot.db.edit_clan(team_toedit['tag'], captain=new_cap_id['player_id'])
                     ftw_client: FTWClient = self.bot.ftw
                     await ftw_client.team_add_user_or_update_role(team_toedit['ftw_team_id'], new_cap_id['discord_id'], UserTeamRole.leader)
 
-                    self.bot.cursor.execute("UPDATE Teams SET captain=%s WHERE tag = %s ;", (new_cap_id['player_id'], team_toedit['tag']))
-                    self.bot.conn.commit()
-
                 # Otherwise delete team
                 else:
-                    # Remove roster message
-                    self.bot.cursor.execute("SELECT roster_message_id FROM Teams WHERE tag = %s;", (team_toedit['tag'],))
-                    roster_message_id = self.bot.cursor.fetchone()
-
                     # Get channel and remove message
                     roster_channel = discord.utils.get(self.guild.channels, id=self.bot.channel_roster_id)
                     try:
-                        roster_message = await roster_channel.fetch_message(roster_message_id['roster_message_id'])
+                        roster_message = await roster_channel.fetch_message(team_toedit['roster_message_id'])
                         await roster_message.delete()
                     except:
                         pass
@@ -471,8 +439,7 @@ class Account(commands.Cog):
                         print(e)
 
                     # Delete clan
-                    self.bot.cursor.execute("DELETE FROM Teams WHERE tag = %s;", (team_toedit['tag'],))
-                    self.bot.conn.commit()
+                    self.bot.db.delete_clan(team_toedit['tag'])
 
                     # Print on the log channel
                     log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
@@ -508,9 +475,7 @@ class Account(commands.Cog):
             status = "unverified"
             verified = 0
 
-        self.bot.cursor.execute("UPDATE Users SET country_verified=%s WHERE id=%s", (verified, player_toedit['id']))
-        self.bot.conn.commit()
-
+        self.bot.db.edit_player(player_toedit['id'], country_verified=verified)
         # Print on the log channel
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
         await log_channel.send(self.bot.quotes['cmdEditPlayer_country_verified_success'].format(playername=player_toedit['ingame_name'], status=status))
