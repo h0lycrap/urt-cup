@@ -145,18 +145,18 @@ class Database():
         return self.cursor.fetchall()
 
 
-    def edit_clan(self, tag, name=None, captain=None, country=None, discord_link=None, roster_message_id=None):
+    def edit_clan(self, tag, newtag=None, name=None, captain=None, country=None, discord_link=None, roster_message_id=None):
         sql = "UPDATE Teams SET "
         params = ()
 
         if name != None:
             sql += "name = %s "
             params += (name,)
-        if tag != None:
+        if newtag != None:
             if len(params) > 0:
                 sql += ", "
             sql += "tag = %s "
-            params += (tag,)
+            params += (newtag,)
         if country != None:
             if len(params) > 0:
                 sql += ", "

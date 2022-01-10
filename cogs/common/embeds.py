@@ -267,6 +267,7 @@ async def signup(bot, cup_id):
     tag_string = ""
 
     roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
+    roster_channel2 = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_national_teams_id)
 
     #Create embed field content
     if team_ids:
@@ -276,11 +277,6 @@ async def signup(bot, cup_id):
             team_name = utils.prevent_discord_formating(team_info['name'])
             team_flag = flag.flagize(team_info['country'])
             team_tag_str = utils.prevent_discord_formating(team_info['tag'])
-            index_str = str(i + 1) + "."
-
-            # Get roster link
-            roster_message = await roster_channel.fetch_message(team_info['roster_message_id'])
-            roster_link = roster_message.jump_url
 
             team_string += f"{team_flag} {team_name}\n"
             tag_string += f"{team_tag_str}\n"
@@ -318,8 +314,6 @@ async def division(bot, cup_id, div_number):
     score_string = ""
     wdl_string = ""
 
-    roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
-
     #Create embed field content
     if team_signup_infos:
         # Sort by poitns
@@ -342,10 +336,6 @@ async def division(bot, cup_id, div_number):
             team_flag = flag.flagize(team_info['country'])
             team_tag_str = utils.prevent_discord_formating(team_info['tag'])
             index_str = str(i + 1) + "."
-
-            # Get roster link
-            roster_message = await roster_channel.fetch_message(team_info['roster_message_id'])
-            roster_link = roster_message.jump_url
 
             tag_string += f"``{index_str.ljust(3)}`` {team_flag} {team_tag_str}\n" #[{team_tag_str}]({roster_link})\n"
 
@@ -439,8 +429,17 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
         status_str = "Not scheduled"
 
     roster_channel = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_id)
-    roster_message1 = await roster_channel.fetch_message(team1['roster_message_id'])
-    roster_message2 = await roster_channel.fetch_message(team2['roster_message_id'])
+    roster_channel2 = discord.utils.get(bot.guilds[0].channels, id=bot.channel_roster_national_teams_id)
+
+    try:
+        roster_message1 = await roster_channel.fetch_message(team1['roster_message_id'])
+    except:
+        roster_message1 = await roster_channel2.fetch_message(team1['roster_message_id'])
+
+    try:
+        roster_message2 = await roster_channel.fetch_message(team2['roster_message_id'])
+    except:
+        roster_message2 = await roster_channel2.fetch_message(team2['roster_message_id'])
 
 
     #team_string = f"{team_flag} [{utils.prevent_discord_formating(team_tag)}]({roster_message.jump_url})\n"

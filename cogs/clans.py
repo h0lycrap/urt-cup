@@ -763,7 +763,7 @@ class Clans(commands.Cog):
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.editclan(tag=team_toedit['tag'], name=teamname)
+        self.bot.db.edit_clan(tag=team_toedit['tag'], name=teamname)
         await user.send(self.bot.quotes['cmdUpdateTeamName_success'])
 
         # Print on the log channel
@@ -804,7 +804,7 @@ class Clans(commands.Cog):
                 # Remove busy status
                 self.bot.users_busy.remove(user.id)
 
-        self.bot.db.edit_clan(tag=tag)
+        self.bot.db.edit_clan(tag=team_toedit['tag'], newtag=tag)
 
         # Edit role name
         team_role = discord.utils.get(self.guild.roles, id=int(team_toedit['role_id']))
