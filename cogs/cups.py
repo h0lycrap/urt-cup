@@ -235,14 +235,24 @@ class Cups(commands.Cog):
                                     Button(style=ButtonStyle.red, label="Delete fixture", custom_id="button_delete_fixture"),
                                 ]])
         
+        # Create sanctions chan
+        chan_sanctions = await category.create_text_channel("sanctions")
+        await chan_sanctions.set_permissions(role_flawless, view_channel=True)
+        await chan_sanctions.set_permissions(role_bot, view_channel=True)
+        await chan_sanctions.set_permissions(self.guild.default_role, view_channel=False)
+        await chan_sanctions.send("":warning: __**Sanctions**__\n```\n                                                                   Warn\n```\n:small_orange_diamond: __**Division 1 :**__\n- `player` : :blue_circle: *(reason : ?)  |  (match : ?)  |  (date : ?)\n\n\n:small_orange_diamond: __**Division 2 :**__\n- `player` : :blue_circle: *(reason : ?)  |  (match : ?)  |  (date : ?)*""
+        await chan_sanctions.send(""~```\n                                                                Suspension\n```\n:small_blue_diamond: __**Division 1 :**__\n- `player` : :orange_circle: *(reason : ?)  |  (suspended for round-11  : match-name )*\n\n\n:small_blue_diamond: __**Division 2 :**__\n- `player` : :orange_circle: *(reason : ?)  |  (suspended for round-11  : match-name )*""
+        await chan_sanctions.send(""~```\n                                                                   Ban\n```\n:small_orange_diamond: __**Division 1 :**__\n- `player` : :red_circle: *(reason : ?)  |  (time : ?)  |  (unban date : ?)*\n\n\n:small_orange_diamond: __**Division 2 :**__\n- `player` : :red_circle: *(reason : ?)  |  (time : ?)  |  (unban date : ?)*""
 
+        # Create others publics chan
+        chan_rules = await category.create_text_channel("rules")
         chan_signups = await category.create_text_channel("signups")
         chan_calendar = await category.create_text_channel("calendar")
         chan_stage = await category.create_text_channel("stage")
         chan_results = await category.create_text_channel("results")
 
         # Create Match schedule and match index chan
-        category_match_schedule = await self.guild.create_category_channel(f"{name}┋ \U0001F4C5 Match Schedule")
+        category_match_schedule = await self.guild.create_category_channel(f"\U0001F4C5┋ {name}┋ Match")
         chan_match_index = await category.create_text_channel("match-index")
         await chan_match_index.set_permissions(role_bot, view_channel=True)
         await chan_match_index.set_permissions(self.guild.default_role, view_channel=False)
