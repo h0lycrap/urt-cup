@@ -461,6 +461,86 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
 
     return embed, components
 
+async def flawless_request(bot, cup_id, channel):
+    # Get fixtures 
+    fixtures = bot.db.get_cup_fixtures(cup_id)
+
+    #Create embed field content
+        fixture_string = "**Scores need to be entered**\n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != 2:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+        fixture_string = "~ \n\n**Schedule needs to be forced**\n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != None or not fixture_info['date_last_proposal']:
+                continue
+
+            # Get the number of hours since the last proposal was sent 
+            gamedate = datetime.date.fromisoformat(fixture_info['date_last_proposal'].split()[0])
+            gametime = datetime.time.fromisoformat(fixture_info['date_last_proposal'].split()[1])
+            gameschedule = datetime.datetime.combine(gamedate, gametime)
+
+            deltatime = datetime.datetime.now() - gameschedule
+
+            if not deltatime.days >= 5:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+
+async def need_streamer(bot, cup_id, channel):
+    # Get fixtures 
+    fixtures = bot.db.get_cup_fixtures(cup_id)
+
+    #Create embed field content
+        fixture_string = "~ \n\n**We need a Streamer for that match**\n\n"
+
+        for i, fixture_info in enumerate(fixtures):
+            index_str = str(i + 1) + "."
+
+            # Get status
+            if fixture_info['status'] != 1:
+                continue
+
+            # Get fixture link
+            fixture_channel = discord.utils.get(bot.guilds[0].channels, id=int(fixture_info['channel_id']))
+
+            fixture_string += f"{fixture_channel.mention}\n"
+
+            if len(fixture_string) > 1900:
+                await channel.send(fixture_string)
+                fixture_string = ""
+
+        await channel.send(fixture_string)
+        
 async def match_index(bot, cup_id, channel):
     # Get fixtures 
     fixtures = bot.db.get_cup_fixtures(cup_id)
