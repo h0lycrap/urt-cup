@@ -115,6 +115,16 @@ async def signups(bot):
 async def fixtures(bot):
     # Get all cups
     for cup_info in bot.db.get_all_cups(1):
+        # Update flawless_request
+        flawless_request_chan = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_flawless_request_id']))
+        await flawless_request_chan.purge(limit=10000)
+        await embeds.flawless_request(bot, cup_info['id'], flawless_request_chan)
+
+        # Update need_streamer
+        need_streamert_chan = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_need_streamer_id']))
+        await need_streamer_chan.purge(limit=10000)
+        await embeds.need_streamer(bot, cup_info['id'], need_streamer_chan)
+
         # Update match_index
         match_index_chan = discord.utils.get(bot.guilds[0].channels, id=int(cup_info['chan_match_index_id']))
         await match_index_chan.purge(limit=10000)
