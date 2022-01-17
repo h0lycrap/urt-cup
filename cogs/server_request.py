@@ -71,7 +71,7 @@ class ServerRequest(commands.Cog):
         server_gametype = GameType.team_survivor
 
         # Server will stay alive even after ttl expiration if players are connected
-        server_ttl = (int(fixture_info['format'][2]) // 2) + 1  # ie. (BO3//2)+1 == 2 hour, (BO5//2)+1 == 3 hours
+        server_ttl = (int(fixture_info['format'][-1]) // 2) + 1  # ie. (BO3//2)+1 == 2 hour, (BO5//2)+1 == 3 hours
         server_rcon = str(random.randint(111111, 999999))
         server_pass = str(random.randint(111111, 999999))
 
@@ -85,8 +85,8 @@ class ServerRequest(commands.Cog):
         await game_server.wait_until_setup()
 
         # TODO @h0lycrap setup server as per the next fixture map here
-        game_server.rcon_command("map ut4_turnpike")
-        game_server.rcon_command("exec utcs_fall21_ts")
+        #game_server.rcon_command("map ut4_turnpike")
+        #game_server.rcon_command("exec utcs_fall21_ts")
 
         await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_success'].format(ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, hours=server_ttl))
 

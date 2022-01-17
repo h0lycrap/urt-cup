@@ -394,7 +394,8 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
     ts_map_string = ""
     ctf_map_string = ""
     if maps:
-        for map_info in maps:
+        for map in maps:
+            map_info = bot.db.get_map(map['map_id'])
             if map_info['gamemode'] == "TS":
                 ts_map_string += f"{map_info['name']}\n"
             else:
@@ -741,11 +742,12 @@ def results(bot, fixture_info, match_type):
     map_str = ""
     score_str = ""
     for i in range(len(maps)):
-        map_str += f"**{maps[i]['name']}** *({maps[i]['gamemode']})*"
+        map_info = bot.db.get_map(maps[i]['map_id'])
+        map_str += f"**{map_info['name']}** *({map_info['gamemode']})*"
         score_str += f"**{maps[i]['team1_score']}-{maps[i]['team2_score']}**"
         if i < len(maps) - 1:
             map_str += "  /  "
             score_str += "  /  "
 
-    result_str = f"**[{match_type}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : {map_str}    **|**    :dart: : {score_str}"
+    result_str = f"**[{match_type.capitalize()}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : {map_str}    **|**    :dart: : {score_str}"
     return result_str

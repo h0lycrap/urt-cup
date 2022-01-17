@@ -294,10 +294,10 @@ class Database():
         
         if div_number != None:
             sql += "AND div_number = %s "
-            params += (div_number)
+            params += (div_number,)
         if team_id != None:
             sql += "AND team_id = %s"
-            params += (team_id)
+            params += (team_id,)
 
         self.cursor.execute(sql, params)
         return self.cursor.fetchall()
@@ -438,11 +438,11 @@ class Database():
 #----FixturePlayers--------------------------------------------------------------------------------------------------------------------------------------------------------------------#
     def create_fixture_player(self, fixture_id, player_id):
         self.cursor.execute("INSERT INTO FixturePlayer (fixture_id, player_id) VALUES (%s, %s)", (fixture_id, player_id))
-        self.cursor.commit()
+        self.conn.commit()
 
     def delete_fixture_players(self, fixture_id):
-        self.bot.cursor.execute("DELETE FROM FixturePlayer WHERE fixture_id = %s", (fixture_id,))
-        self.bot.conn.commit()
+        self.cursor.execute("DELETE FROM FixturePlayer WHERE fixture_id = %s", (fixture_id,))
+        self.conn.commit()
 
     def get_fixture_players(self, fixture_id):
         self.cursor.execute("SELECT * FROM FixturePlayer WHERE fixture_id=%s", (fixture_id,))
@@ -473,7 +473,7 @@ class Database():
 #----FixtureMaps--------------------------------------------------------------------------------------------------------------------------------------------------------------------#
 
     def get_fixture_maps(self, fixture_id):
-        self.cursor.execute("SELECT * FROM FixtureMap f INNER JOIN Maps m ON f.map_id=m.id WHERE fixture_id=%s", (fixture_id,))
+        self.cursor.execute("SELECT * FROM FixtureMap WHERE fixture_id=%s", (fixture_id,))
         return self.cursor.fetchall()
 
     def create_fixture_map(self, fixture_id, map_id):

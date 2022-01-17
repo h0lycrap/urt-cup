@@ -1624,7 +1624,8 @@ class Fixtures(commands.Cog):
         self.bot.db.delete_fixture_players(fixture_info['id'])
 
         # Insert into DB
-        self.bot.db.create_fixture_player(fixture_id=fixture_info['id'], player_id=player_id)
+        for player_id in team1_players_played + team2_players_played:
+            self.bot.db.create_fixture_player(fixture_id=fixture_info['id'], player_id=player_id)
 
         # Get cup info and post results
         cup_info = self.bot.db.get_cup(id=fixture_info['cup_id'])
@@ -1635,11 +1636,11 @@ class Fixtures(commands.Cog):
             match_type = interaction.message.channel.name.split('┋')[0].title().replace('-', " ")
         results_chan = discord.utils.get(self.guild.channels, id=int(cup_info['chan_results_id']))
         if results_chan:
-            result_str = embeds.results(self.bot, fixture_info, match_type)
+            result_str = embeds.results(self.bot, fixture_info, match_type.capitalize())
             await results_chan.send(result_str)
 
         # Set fixture to compeleted
-        if int(fixture_info['status']) == 2:
+        if int(fixture_info['status']) == FixtureStatus.InProgress.value:
             self.bot.db.edit_fixture(fixture_info['id'], status=FixtureStatus.Finished)
 
         # Refresh all fixture status

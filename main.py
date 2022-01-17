@@ -76,6 +76,7 @@ bot.channel_roster_national_teams_id = int(os.getenv('channel_roster_national_te
 bot.channel_panel_id = int(os.getenv('channel_panel_id'))
 
 bot.category_match_schedule_id = int(os.getenv('category_match_schedule_id'))
+bot.category_archive_id = int(os.getenv('category_archive_id'))
 
 bot.max_players_per_team = 8
 bot.users_busy = []

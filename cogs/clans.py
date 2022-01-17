@@ -426,7 +426,10 @@ class Clans(commands.Cog):
                 await log_channel.send(self.bot.quotes['cmdEditClan_admin_addplayer_log'].format(name=player_toadd['ingame_name'], teamname=team_toedit['name']))
 
                 # notify the player
-                await player_topm.send(self.bot.quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit['name']))
+                try:
+                    await player_topm.send(self.bot.quotes['cmdAddPlayer_accepted'].format(teamname=team_toedit['name']))
+                except:
+                    print(f"Cant dm {player_toadd['urtauth']}.")
 
 
     async def remove_player(self, team_toedit, user, interaction):

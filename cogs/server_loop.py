@@ -1,3 +1,4 @@
+from unicodedata import category
 import discord
 from discord import channel
 from discord.ext import commands, tasks
@@ -89,21 +90,29 @@ class ServerLoop(commands.Cog):
 
         # Get div number
         fixture_channel = discord.utils.get(self.guild.channels, id=int(fixture['channel_id']))
-        if "D1" in fixture_channel.category.name:
+        if "d1" in fixture_channel.category.name.lower():
             div_number = 1
-        else:
+        elif "d2" in fixture_channel.category.name.lower():
             div_number = 2 
+        else:
+            div_number = 0
 
-        # Get div info
-        div_info = self.bot.db.get_division(cup_id=fixture['cup_id'], div_number=div_number)
+        if div_number != 0:
+            div_info = self.bot.db.get_division(cup_id=fixture['cup_id'], div_number=div_number)
+            archive_category = discord.utils.get(self.guild.categories, id=int(div_info['archive_category_id']))
 
-        # Archive fixture channel
-        archive_category = discord.utils.get(self.guild.categories, id=int(div_info['archive_category_id']))
+            # Check if category is full
+            if len(archive_category.channels) >= 50:
+                archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
+                self.bot.db.edit_division(id=div_info['id'], archive_category_id=archive_category.id)
+        else:
+            archive_category = discord.utils.get(self.guild.categories, id=int(self.bot.archive_category_id))
+            if len(archive_category.channels) >= 50:
+                new_archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives")
+                for archived_channel in archive_category.channels:
+                    await archived_channel.edit(category=new_archive_category)
 
-        # Check if category is full
-        if len(archive_category.channels) >= 50:
-            archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
-            self.bot.db.edit_division(id=div_info['id'], archive_category_id=archive_category.id)
+
 
         await fixture_channel.edit(category=archive_category)
 
@@ -154,7 +163,8 @@ class ServerLoop(commands.Cog):
             all_demos = "".join(demos)
             missing_demos = ""
             # Check demos
-            for map in maps_played:
+            for map_played in maps_played:
+                map = self.bot.db.get_map(map_played['map_id'])
                 if not map['name'].lower() in all_demos:
                     missing_demos += f"{map['name']} __{map['gamemode']}__ "
 
