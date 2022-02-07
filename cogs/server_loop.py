@@ -106,7 +106,7 @@ class ServerLoop(commands.Cog):
                 archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives┋D{div_number}")
                 self.bot.db.edit_division(id=div_info['id'], archive_category_id=archive_category.id)
         else:
-            archive_category = discord.utils.get(self.guild.categories, id=int(self.bot.archive_category_id))
+            archive_category = discord.utils.get(self.guild.categories, id=int(self.bot.category_archive_id))
             if len(archive_category.channels) >= 50:
                 new_archive_category = await self.guild.create_category_channel(f"\U0001F4BC┋Archives")
                 for archived_channel in archive_category.channels:

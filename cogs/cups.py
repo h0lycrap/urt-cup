@@ -201,14 +201,12 @@ class Cups(commands.Cog):
 
         # Create category and channels
         role_flawless = discord.utils.get(self.guild.roles, id=int(self.bot.role_flawless_crew_id))
-        role_moderator = discord.utils.get(self.guild.roles, id=int(self.bot.role_moderator_id))
         role_streamer = discord.utils.get(self.guild.roles, id=int(self.bot.role_streamer_id))
         role_bot = discord.utils.get(self.guild.roles, id=int(self.bot.role_bot_id))
         role_unreg = discord.utils.get(self.guild.roles, id=int(self.bot.role_unregistered_id))
         category = await self.guild.create_category_channel(f"\U0001F947┋ {name}")
         await category.set_permissions(self.guild.default_role, send_messages=False)
         await category.set_permissions(role_flawless, send_messages=True)
-        await category.set_permissions(role_moderator, send_messages=True)
         await category.set_permissions(role_bot, send_messages=True)
         await category.set_permissions(role_unreg, view_channel=False)
 
@@ -217,7 +215,6 @@ class Cups(commands.Cog):
         await chan_admin.set_permissions(role_bot, view_channel=True)
         await chan_admin.set_permissions(self.guild.default_role, view_channel=False)
         await chan_admin.set_permissions(role_flawless, view_channel=True)
-        await chan_admin.set_permissions(role_moderator, view_channel=True)
         await chan_admin.send("Commands to edit the cup in general", components=[[
                                     Button(style=ButtonStyle.blue, label="Change cup name", custom_id="button_edit_cup_name"),
                                     Button(style=ButtonStyle.blue, label="Change roster req.", custom_id="button_edit_cup_mini_roster"),
@@ -247,7 +244,6 @@ class Cups(commands.Cog):
         await chan_match_index.set_permissions(role_bot, view_channel=True)
         await chan_match_index.set_permissions(self.guild.default_role, view_channel=False)
         await chan_match_index.set_permissions(role_flawless, view_channel=True)
-        await chan_match_index.set_permissions(role_moderator, view_channel=True)
         await chan_match_index.set_permissions(role_streamer, view_channel=True)
 
         ftw_client: FTWClient = self.bot.ftw

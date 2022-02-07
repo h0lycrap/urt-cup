@@ -65,7 +65,6 @@ bot.role_unregistered_id = int(os.getenv('role_unregistered_id'))
 bot.role_captains_id = int(os.getenv('role_captains_id'))
 bot.role_flawless_crew_id = int(os.getenv('role_flawless_crew_id'))
 bot.role_cup_supervisor_id = int(os.getenv('role_cup_supervisor_id'))
-bot.role_moderator_id = int(os.getenv('role_moderator_id'))
 bot.role_streamer_id = int(os.getenv('role_streamer_id'))
 bot.role_bot_id = int(os.getenv('role_bot_id'))
 

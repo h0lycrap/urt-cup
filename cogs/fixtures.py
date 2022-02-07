@@ -31,8 +31,7 @@ class Fixtures(commands.Cog):
         elif interaction.component.id == "button_edit_fixture":
             # Check if the user is admin
             flawless_role = discord.utils.get(self.guild.roles, id=self.bot.role_flawless_crew_id)
-            moderator_role = discord.utils.get(self.guild.roles, id=self.bot.role_moderator_id)
-            if not flawless_role in user.roles and not moderator_role in user.roles:
+            if not flawless_role in user.roles:
                 await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Nice try, but you need to be an admin to press this.")
                 return
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="What action do you want to perform?", components=[[
@@ -224,7 +223,6 @@ class Fixtures(commands.Cog):
         fixture_category = discord.utils.get(self.guild.channels, id=int(category_id))
         
         role_flawless_crew = discord.utils.get(self.guild.roles, id=int(self.bot.role_flawless_crew_id)) 
-        role_moderator = discord.utils.get(self.guild.roles, id=int(self.bot.role_moderator_id))
         role_streamer = discord.utils.get(self.guild.roles, id=int(self.bot.role_streamer_id))
         role_bot = discord.utils.get(self.guild.roles, id=int(self.bot.role_bot_id))
 
@@ -239,7 +237,6 @@ class Fixtures(commands.Cog):
             role_team1: discord.PermissionOverwrite(read_messages=True), 
             role_team2: discord.PermissionOverwrite(read_messages=True),
             role_flawless_crew: discord.PermissionOverwrite(read_messages=True),
-            role_moderator: discord.PermissionOverwrite(read_messages=True),
             role_streamer: discord.PermissionOverwrite(read_messages=True)
         }
 
