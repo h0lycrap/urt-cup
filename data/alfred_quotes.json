@@ -224,6 +224,7 @@
 
 	"cmdCreateFixtures_confirmation" : "Are you sure you want to create {number_of_fixtures} fixtures for the division {div_number}?",
 	"cmdCreateFixtures_cancel" : "Fixture creation canceled.",
+	"cmdCreateFixtures_need_streamer" : "Hi <@&{role_streamer}> , who's available for this match : <#{gamechannel}> ?",
 
 
 	"cmdForceRemoveSignup_confirmation" : "Are you sure you want to remove this team from the signups? \n :exclamation: :exclamation: :exclamation: **This action is irreversible and will permanently delete all the data of the team in this cup**",

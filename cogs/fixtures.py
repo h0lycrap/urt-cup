@@ -64,6 +64,10 @@ class Fixtures(commands.Cog):
             self.bot.async_loop.create_task(update.signups(self.bot))
         elif interaction.component.id.startswith("button_change_map_fixture_admin"):
             await self.change_map_fixture_admin(interaction)
+        elif interaction.component.id.startswith("stream_avi_button"):
+            await self.update_streamer_needed(interaction)
+        elif interaction.component.id.startswith("shoutcast_avi_button"):
+            await self.update_streamer_needed(interaction, shoutcast=True)
 
     async def create_fixture(self, interaction):
         # Get which cup this is from 
@@ -1278,8 +1282,11 @@ class Fixtures(commands.Cog):
         gameschedule = datetime.datetime.combine(gamedate_formatted, gametime_formatted)
         gamedate_str = str(gameschedule)
 
+        # Send Streamer needed message  
+        stream_avi_msg = await self.send_streamer_needed_msg(fixture_info, team_info, other_team_info, gameschedule)
+
         # Update in DB
-        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled)
+        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled, stream_avi_msg=stream_avi_msg.id)
 
         # Notify
         await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_admin'].format(otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime), components=[[
@@ -1330,8 +1337,11 @@ class Fixtures(commands.Cog):
         
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_accepted'])
 
+        # Send Streamer needed message  
+        stream_avi_msg = await self.send_streamer_needed_msg(fixture_info, team_info, other_team_info, gameschedule)
+
         # Update in DB
-        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled)
+        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled, stream_avi_msg=stream_avi_msg.id)
 
         # Notify
         await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_success'].format(teamname=team_info['name'],otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime), components=[[
@@ -1487,6 +1497,14 @@ class Fixtures(commands.Cog):
 
             # Update score in DB
             self.bot.db.edit_fixture_map(map_played['id'], team1_score, team2_score)
+
+        # Delete streamer request
+        need_streamer_channel = discord.utils.get(self.guild.channels, id=int(self.bot.channel_need_stream_id))
+        #try:
+        streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
+        await streamer_avi_msg.delete()
+        #except:
+        #    pass 
 
         # Remove busy status
         self.bot.users_busy.remove(interaction.author.id)
@@ -1702,10 +1720,52 @@ class Fixtures(commands.Cog):
         fixture_embed, components = await embeds.fixture(self.bot, fixture_id=fixture_info['id'])
         await embed_message.edit(embed=fixture_embed, components=components)
 
+    async def update_streamer_needed(self, interaction, shoutcast=False):
+        fixture_info = self.bot.db.get_fixture(stream_avi_msg=interaction.message.id)
+        team1_info = self.bot.db.get_clan(id=fixture_info['team1'])
+        team2_info = self.bot.db.get_clan(id=fixture_info['team2'])
+
+        strmlist = self.bot.db.get_streamers_of_fixture(fixture_info['id'])
+        shtlist = self.bot.db.get_streamers_of_fixture(fixture_info['id'], shoutcaster=True)
+
+        if interaction.author.id in strmlist and not shoutcast:
+            strmlist.remove(interaction.author.id)
+            self.bot.db.delete_streamer(fixture_info['id'], interaction.author.id)
+        elif interaction.author.id not in strmlist and not shoutcast:
+            strmlist.append(interaction.author.id)
+            self.bot.db.create_streamer(fixture_info['id'], interaction.author.id)
+        elif interaction.author.id in shtlist and shoutcast:
+            shtlist.remove(interaction.author.id)
+            self.bot.db.delete_streamer(fixture_info['id'], interaction.author.id, shoutcaster=True)
+        elif interaction.author.id not in shtlist and shoutcast:
+            shtlist.append(interaction.author.id)
+            self.bot.db.create_streamer(fixture_info['id'], interaction.author.id, shoutcaster=True)
+
+        e = embeds.streamer_avi(team1_info, team2_info, fixture_info['date'], strmlist, shtlist)
+        
+        await interaction.message.edit(embed=e)
+
+        await interaction.respond(type=6)
+
+    async def send_streamer_needed_msg(self, fixture_info, team1_info, team2_info, gameschedule):
+        # Delete already sent stream_request_msg
+        need_streamer_channel = discord.utils.get(self.guild.channels, id=int(self.bot.channel_need_stream_id))
+
+        streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
+        await streamer_avi_msg.delete()
 
 
-
-
+        # Send stream request msg
+        role_streamer = discord.utils.get(self.guild.roles, id=int(self.bot.role_streamer_id))
+        btn_stream = [
+            [
+                Button(style=ButtonStyle.green, label = "Im avi to Stream \U0001F3A5", custom_id = f"stream_avi_button"), 
+                Button(style=ButtonStyle.blue, label = "I'm avi to Shoutcast \U0001F3A4", custom_id = f"shoutcast_avi_button"),
+                Button(style=5, label="Convert to your timezone", url=utils.timezone_link(str(gameschedule)), custom_id="button_schedule_timezone_link")
+            ],
+        ]
+        strm_embed = embeds.streamer_avi(team1_info, team2_info, str(gameschedule))
+        return await need_streamer_channel.send(self.bot.quotes['cmdCreateFixtures_need_streamer'].format(role_streamer=role_streamer.id, gamechannel=fixture_info['channel_id']), embed=strm_embed, components=btn_stream)
 
         
 

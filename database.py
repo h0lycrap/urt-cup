@@ -355,7 +355,7 @@ class Database():
         self.conn.commit()
         return self.cursor.lastrowid
 
-    def get_fixture(self, id=None, team1=None, team2=None, channel_id=None):
+    def get_fixture(self, id=None, team1=None, team2=None, channel_id=None, stream_avi_msg=None):
         sql = "SELECT * FROM Fixtures WHERE "
         params = ()
 
@@ -377,6 +377,11 @@ class Database():
                 sql += "AND "
             sql += "channel_id = %s "
             params += (channel_id,)
+        if stream_avi_msg != None:
+            if len(params) > 0:
+                sql += "AND "
+            sql += "stream_avi_msg = %s "
+            params += (stream_avi_msg,)
         
         if len(params) == 0:
             return None
@@ -384,7 +389,7 @@ class Database():
         self.cursor.execute(sql, params)
         return self.cursor.fetchone()
 
-    def edit_fixture(self, id, format=None, date=None, status=None, date_last_proposal=None, embed_id=None):
+    def edit_fixture(self, id, format=None, date=None, status=None, date_last_proposal=None, embed_id=None, stream_avi_msg=None):
         sql = "UPDATE Fixtures SET "
         params = ()
 
@@ -411,6 +416,11 @@ class Database():
                 sql += ", "
             sql += "embed_id = %s "
             params += (embed_id,)
+        if stream_avi_msg != None:
+            if len(params) > 0:
+                sql += ", "
+            sql += "stream_avi_msg = %s "
+            params += (stream_avi_msg,)
         if len(params) == 0:
             return
         sql += " WHERE id = %s"
@@ -662,5 +672,37 @@ class Database():
     def get_map(self, id):
         self.cursor.execute("SELECT * FROM Maps WHERE id = %s", (id,))
         return self.cursor.fetchone()
+
+#----Streamers--------------------------------------------------------------------------------------------------------------------------------------------------------------------#
+    def create_streamer(self, fixture_id, player_id, shoutcaster=False):
+        if not shoutcaster:
+            shoutcaster = 0
+        else:
+            shoutcaster = 1
+        self.cursor.execute("INSERT INTO Streamers (fixture_id, player_id, shoutcaster) VALUES (%s, %s, %s)", (fixture_id, player_id, shoutcaster))
+        self.conn.commit()
+
+    def delete_streamer(self, fixture_id, player_id, shoutcaster=False):
+        if not shoutcaster:
+            shoutcaster = 0
+        else:
+            shoutcaster = 1
+        self.cursor.execute("DELETE FROM Streamers WHERE fixture_id=%s AND player_id=%s AND shoutcaster=%s", (fixture_id, player_id, shoutcaster))
+        self.conn.commit()
+
+    
+    def get_streamers_of_fixture(self, fixture_id, shoutcaster=False):
+        if not shoutcaster:
+            shoutcaster = 0
+        else:
+            shoutcaster = 1
+        self.cursor.execute("SELECT * FROM Streamers WHERE fixture_id=%s AND shoutcaster=%s", (fixture_id, shoutcaster))
+        streamers = self.cursor.fetchall()
+
+        strm_list = []
+        for streamer in streamers:
+            strm_list.append(int(streamer['player_id']))
+
+        return strm_list
 
     

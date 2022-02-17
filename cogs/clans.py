@@ -172,7 +172,7 @@ class Clans(commands.Cog):
         if interaction.parent_component.id == "dropmenu_teamtoedit":
             user = discord.utils.get(self.guild.members, id=interaction.user.id)
             user_info = self.bot.db.get_player(discord_id=interaction.user.id)
-            clans = self.bot.db.get_teams_of_player(user_info['id'])
+            clans = self.bot.db.get_teams_of_player(user_info['id'], admin_managed=0)
             clan_to_edit = clans[int(interaction.component[0].value)]
             clan_embed, _ = embeds.team(self.bot, tag=clan_to_edit['tag'], show_invited=True)
 

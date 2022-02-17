@@ -73,6 +73,7 @@ bot.channel_demolog_id = int(os.getenv('channel_demolog_id'))
 bot.channel_roster_id = int(os.getenv('channel_roster_id'))
 bot.channel_roster_national_teams_id = int(os.getenv('channel_roster_national_teams_id'))
 bot.channel_panel_id = int(os.getenv('channel_panel_id'))
+bot.channel_need_stream_id = int(os.getenv('channel_need_stream_id'))
 
 bot.category_match_schedule_id = int(os.getenv('category_match_schedule_id'))
 bot.category_archive_id = int(os.getenv('category_archive_id'))

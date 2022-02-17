@@ -751,3 +751,34 @@ def results(bot, fixture_info, match_type):
 
     result_str = f"**[{match_type.capitalize()}]**    **|**    :calendar_spiral: {date_str}    **|**    {flag.flagize(team1['country'])} **{utils.prevent_discord_formating(team1['tag'])}**  vs  {flag.flagize(team2['country'])} **{utils.prevent_discord_formating(team2['tag'])}**    **|**    :map: : {map_str}    **|**    :dart: : {score_str}"
     return result_str
+
+
+def streamer_avi(team1, team2, date, strmavi_list=[], shtavi_list=[]):
+
+    gamedate = datetime.date.fromisoformat(date.split()[0])
+    gametime = datetime.time.fromisoformat(date.split()[1])
+    gameschedule = datetime.datetime.combine(gamedate, gametime)
+    fixture_schedule_elems = str(gameschedule).split(" ")
+    fixture_date_elems = fixture_schedule_elems[0].split('-')
+    fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
+    fixture_time_elems = fixture_schedule_elems[1].split(':')
+    fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
+    date_str = f"{fixture_date}  -  {fixture_time}"
+
+    strmavi=""
+    for streamerid in strmavi_list:
+        strmavi+= f"<@{streamerid}>\n"
+    if strmavi == "":
+        strmavi="None"
+
+    shtavi=""
+    for streamerid in shtavi_list:
+        shtavi+= f"<@{streamerid}>\n"
+    if shtavi == "":
+        shtavi="None"
+    
+    e = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description=f":calendar_spiral: {date_str} UTC \n[Convert to your timezone]({utils.timezone_link(str(gameschedule))})")
+    e.add_field(name="Streamer :eyes: : :black_small_square: ", value=strmavi, inline = True)
+    e.add_field(name="Shoutcaster :microphone2: :", value=shtavi, inline = True)
+
+    return e
