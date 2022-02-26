@@ -78,7 +78,7 @@ async def signups(bot):
         # Check if the signup are open 
         #bot.cursor.execute("SELECT * FROM Signups WHERE cup_id=%d", (cup_info['id'],))
 
-        if True: #not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)): # TEMPORARYYYYY
+        if not(signup_start_date <= datetime.now() <= signup_end_date + timedelta(days=1)): # TEMPORARYYYYY
             signup_button = [Button(style=ButtonStyle.grey, disabled=True, label="Signup closed", custom_id=f"button_signup_{cup_info['id']}")]
         else:
             signup_button = [Button(style=ButtonStyle.green, label="Signup", custom_id=f"button_signup_{cup_info['id']}")]

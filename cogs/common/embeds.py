@@ -70,7 +70,7 @@ def team(bot, tag, show_invited=False):
     members = list(filter(lambda x: x['accepted'] == RosterStatus.Member.value or x['accepted'] == RosterStatus.Captain.value, accepted_players))
 
     # Get the inactives 
-    inactives= list(filter(lambda x: x['accepted'] == RosterStatus.Invited.value, accepted_players))
+    inactives= list(filter(lambda x: x['accepted'] == RosterStatus.Inactive.value, accepted_players))
 
     # Get inactive name list
     if len(inactives) == 0:

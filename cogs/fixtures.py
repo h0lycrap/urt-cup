@@ -384,7 +384,10 @@ class Fixtures(commands.Cog):
                     Button(style=ButtonStyle.blue, label=f"{team2_info['tag']}", emoji=flag.flagize(team2_info['country']), custom_id=f"button_pickban_knifewon_utwc_{gamemode_team1.value}_{team2_info['id']}")]], ephemeral=False)
             else:
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBanInvitation_utwc_diff_gamemode'].format(gamemode1=gamemode_team1.value, gamemode2=gamemode_team2.value, team1=team1_info['name'], team2=team2_info['name']), ephemeral=False)
-                await self.pickban_bo3_utwc_diff_gamemode(fixture_info, team1_info, team2_info, interaction.message.channel, gamemode_team1)
+                if fixture_info['format'] == FixtureFormat.BO3UTWC:
+                    await self.pickban_bo3_utwc_diff_gamemode(fixture_info, team1_info, team2_info, interaction.message.channel, gamemode_team1)
+                elif fixture_info['format'] == FixtureFormat.BO5UTWC:
+                    await self.pickban_bo5_utwc_diff_gamemode(fixture_info, team1_info, team2_info, interaction.message.channel, gamemode_team1)
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw_utwc")]])
 
         else:
@@ -496,15 +499,15 @@ class Fixtures(commands.Cog):
 
             if (fixture_info['format'] == FixtureFormat.BO2.value or fixture_info['format'] == FixtureFormat.BO3.value):
                 await self.pickban_bo2(fixture_info, team_button, other_team_button, interaction.message.channel)
-
             if (fixture_info['format'] == FixtureFormat.BO5.value):
                 await self.pickban_bo5(fixture_info, team_button, other_team_button, interaction.message.channel)
-
             if (fixture_info['format'] == FixtureFormat.BO3.value or fixture_info['format'] == FixtureFormat.BO5.value):
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw")]])
-
             if (fixture_info['format'] == FixtureFormat.BO3UTWC.value):
                 await self.pickban_bo3_utwc_same_gamemode(fixture_info, team_button, other_team_button, interaction.message.channel, gamemode)
+                await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw_utwc")]])
+            if (fixture_info['format'] == FixtureFormat.BO5UTWC.value):
+                await self.pickban_bo5_utwc_same_gamemode(fixture_info, team_button, other_team_button, interaction.message.channel, gamemode)
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw_utwc")]])
 
         # Update embed
@@ -715,6 +718,55 @@ class Fixtures(commands.Cog):
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
 
+    async def pickban_bo5_utwc_same_gamemode(self, fixture_info, team1, team2, channel, gamemode):
+        map1, map2, map3, map4 = await self.banuntil4_get4(team2, team1, channel, Gamemode(gamemode)) 
+
+        # Add maps to DB
+        self.bot.db.create_fixture_map(fixture_info['id'], map1['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], map2['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], map3['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], map4['id'])
+
+        # Set fixture to on-going
+        self.bot.db.edit_fixture(id=fixture_info['id'], status=FixtureStatus.InProgress)
+
+        # Remove busy status
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_bo5_utcw_same_gamemode_end'].format(teamname=team1['name'], map1=map1['name'], map2=map2['name'], map3=map3['name'], map4=map4['name'], gamemode=gamemode))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
+
+    async def pickban_bo5_utwc_diff_gamemode(self, fixture_info, team1, team2, channel, gamemode_team1):
+        if gamemode_team1 == Gamemode.TS:
+            mapadvantage_ctf = team1
+            mapadvantage_ts = team2
+        else:
+            mapadvantage_ctf = team2
+            mapadvantage_ts = team1
+        ts_map1, ts_map2 = await self.banuntil2_get2(mapadvantage_ctf, mapadvantage_ts, channel, Gamemode.TS)
+        ctf_map1, ctf_map2 = await self.banuntil2_get2(mapadvantage_ctf, mapadvantage_ts, channel, Gamemode.CTF)
+
+        # Add maps to DB
+        self.bot.db.create_fixture_map(fixture_info['id'], ts_map1['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], ts_map2['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], ctf_map1['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], ctf_map2['id'])
+
+        # Set fixture to on-going
+        self.bot.db.edit_fixture(id=fixture_info['id'], status=FixtureStatus.InProgress)
+
+        # Remove busy status
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_bo5_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name'], ctfmap1=ctf_map1['name'], ctfmap2=ctf_map2['name']))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
+
 
     async def banuntil2(self, mapadvantage_ctf, mapadvantage_ts, channel, gamemode, draw=False, maps=None):
         if gamemode == Gamemode.TS:
@@ -890,6 +942,67 @@ class Fixtures(commands.Cog):
                 team_toban = mapadvantage_ctf
 
         return maps[0], maps[1]
+
+    async def banuntil4_get4(self, mapadvantage_ctf, mapadvantage_ts, channel, gamemode):
+
+        team_toban = mapadvantage_ts
+
+        # Get maps
+        maps = self.bot.db.get_maps_gamemode(gamemode)
+        maps.sort(key=lambda x: x['name'])
+
+        embed_title = f"{gamemode.value} Maps"
+
+        # Send embeds with the remaining maps
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        # Ban until 4 maps are left
+        while len(maps) > 4:
+            # Prompt the ban
+            pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+
+            # Get banning team role
+            team_toban_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+            ban_check = False
+            while not ban_check:
+                interaction_ban = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+                map_toban = maps[int(interaction_ban.component[0].value)]
+                user_clicking = discord.utils.get(self.guild.members, id=interaction_ban.author.id)
+                if not team_toban_role in user_clicking.roles:
+                    await interaction_ban.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+                    continue
+
+                # Ask confirmation
+                await interaction_ban.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_confirmation'].format(mapname=map_toban['name']), components=[[
+                                            Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                            Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+                interaction_banconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_ban.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+                if interaction_banconfirmation.component.id == 'button_pickban_no':
+                    continue
+                elif interaction_banconfirmation.component.id == 'button_pickban_yes':
+                    ban_check = True
+
+            await interaction_banconfirmation.respond(type=6)
+            # Ban the map
+            maps.remove(map_toban)
+
+            # Edit embed and delete prompt
+            await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name'], teamname=team_toban['name']))
+            map_embed = embeds.map_list(maps, embed_title)
+            await channel.send(embed=map_embed)
+            await pickban_prompt_msg.delete()
+
+            # Switch banning team
+            if team_toban == mapadvantage_ctf:
+                team_toban = mapadvantage_ts
+            else:
+                team_toban = mapadvantage_ctf
+
+        return maps[0], maps[1], maps[2], maps[3]
 
     async def pickban_draw(self, fixture_info, team1, team2, channel):
 
@@ -1087,6 +1200,8 @@ class Fixtures(commands.Cog):
             map = self.bot.db.get_map(map_played['map_id'])
             if map in ts_map_list:
                 ts_map_list.remove(map)
+
+        print(ts_map_list)
 
         if len(ts_map_list) % 2 == 1:
             picked_map = await self.banuntil2(team2, team1, channel, Gamemode.TS, draw=True, maps=ts_map_list)
@@ -1500,11 +1615,9 @@ class Fixtures(commands.Cog):
 
         # Delete streamer request
         need_streamer_channel = discord.utils.get(self.guild.channels, id=int(self.bot.channel_need_stream_id))
-        #try:
-        streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
-        await streamer_avi_msg.delete()
-        #except:
-        #    pass 
+        if fixture_info['stream_avi_msg']:
+            streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
+            await streamer_avi_msg.delete()
 
         # Remove busy status
         self.bot.users_busy.remove(interaction.author.id)
@@ -1750,9 +1863,9 @@ class Fixtures(commands.Cog):
     async def send_streamer_needed_msg(self, fixture_info, team1_info, team2_info, gameschedule):
         # Delete already sent stream_request_msg
         need_streamer_channel = discord.utils.get(self.guild.channels, id=int(self.bot.channel_need_stream_id))
-
-        streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
-        await streamer_avi_msg.delete()
+        if fixture_info['stream_avi_msg']:
+            streamer_avi_msg = await need_streamer_channel.fetch_message(int(fixture_info['stream_avi_msg']))
+            await streamer_avi_msg.delete()
 
 
         # Send stream request msg
@@ -1760,8 +1873,7 @@ class Fixtures(commands.Cog):
         btn_stream = [
             [
                 Button(style=ButtonStyle.green, label = "Im avi to Stream \U0001F3A5", custom_id = f"stream_avi_button"), 
-                Button(style=ButtonStyle.blue, label = "I'm avi to Shoutcast \U0001F3A4", custom_id = f"shoutcast_avi_button"),
-                Button(style=5, label="Convert to your timezone", url=utils.timezone_link(str(gameschedule)), custom_id="button_schedule_timezone_link")
+                Button(style=ButtonStyle.blue, label = "I'm avi to Shoutcast \U0001F3A4", custom_id = f"shoutcast_avi_button")
             ],
         ]
         strm_embed = embeds.streamer_avi(team1_info, team2_info, str(gameschedule))
