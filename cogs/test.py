@@ -47,6 +47,13 @@ class Test(commands.Cog):
     '''
 
     
+    @commands.command()
+    @check.is_guild_manager()
+    async def clearchan(self, ctx):
+        chan  = ctx.message.channel
+        async for message in chan.history(limit=200):
+            await message.delete()
+    
 
 def setup(bot):
     bot.add_cog(Test(bot))
