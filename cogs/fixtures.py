@@ -390,6 +390,10 @@ class Fixtures(commands.Cog):
                     await self.pickban_bo5_utwc_diff_gamemode(fixture_info, team1_info, team2_info, interaction.message.channel, gamemode_team1)
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw_utwc")]])
 
+        elif fixture_info['format'] == FixtureFormat.BO2TSONLY:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_prompt_tsonly'], components=[[
+                    Button(style=ButtonStyle.blue, label=f"{team1_info['tag']}", emoji=flag.flagize(team1_info['country']), custom_id=f"button_pickban_knifewon_{team1_info['id']}"),
+                    Button(style=ButtonStyle.blue, label=f"{team2_info['tag']}", emoji=flag.flagize(team2_info['country']), custom_id=f"button_pickban_knifewon_{team2_info['id']}")]], ephemeral=False)
         else:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_prompt'], components=[[
                     Button(style=ButtonStyle.blue, label=f"{team1_info['tag']}", emoji=flag.flagize(team1_info['country']), custom_id=f"button_pickban_knifewon_{team1_info['id']}"),
@@ -421,7 +425,8 @@ class Fixtures(commands.Cog):
 
         # Check if utwc
         utwc_fixture = interaction.component.id.split("_")[3] == "utwc"
-        gamemode = interaction.component.id.split("_")[4]
+        if utwc_fixture:
+            gamemode = interaction.component.id.split("_")[4]
         draw = "draw" in interaction.component.id.split("_")
         draw_str = ""
         if draw:
@@ -473,13 +478,16 @@ class Fixtures(commands.Cog):
             self.bot.fixtures_busy.remove(interaction.message.channel.id)
             return 
 
-        prompt_text = self.bot.quotes['cmdPickBanInvitation_prompt']
         if utwc_fixture and not draw:
             prompt_text = self.bot.quotes['cmdPickBanInvitation_utwc_same_gamemode'].format(gamemode=gamemode)
         elif utwc_fixture and draw:
             prompt_text = self.bot.quotes['cmdPickBanInvitation_utwc_draw']
         elif not utwc_fixture and draw:
             prompt_text = self.bot.quotes['cmdPickBanDrawInvitation_prompt']
+        elif fixture_info['format'] == FixtureFormat.BO2TSONLY:
+            prompt_text = self.bot.quotes['cmdPickBanInvitation_prompt_tsonly']
+        else:
+            prompt_text = self.bot.quotes['cmdPickBanInvitation_prompt']
 
         await interaction.message.edit(prompt_text, components=[[
                 Button(style=team1_button_style, label=team1_button_label, emoji=flag.flagize(team1_info['country']), custom_id=team1_button_id, disabled=both_team_agreed),
@@ -499,6 +507,8 @@ class Fixtures(commands.Cog):
 
             if (fixture_info['format'] == FixtureFormat.BO2.value or fixture_info['format'] == FixtureFormat.BO3.value):
                 await self.pickban_bo2(fixture_info, team_button, other_team_button, interaction.message.channel)
+            if (fixture_info['format'] == FixtureFormat.BO2TSONLY.value):
+                await self.pickban_bo2_tsonly(fixture_info, team_button, other_team_button, interaction.message.channel)
             if (fixture_info['format'] == FixtureFormat.BO5.value):
                 await self.pickban_bo5(fixture_info, team_button, other_team_button, interaction.message.channel)
             if (fixture_info['format'] == FixtureFormat.BO3.value or fixture_info['format'] == FixtureFormat.BO5.value):
@@ -604,6 +614,34 @@ class Fixtures(commands.Cog):
 
         # Notify
         await channel.send(self.bot.quotes['cmdPickBan_bo2_end'].format(teamname=team1['name'], tsmap=ts_map['name'], ctfmap=ctf_map['name']))
+
+        # Update fixtures
+        self.bot.async_loop.create_task(update.fixtures(self.bot))
+
+    async def pickban_bo2_tsonly(self, fixture_info, team1, team2, channel):
+
+        # Get map lists
+        ts_map_list = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        ctf_map_list = self.bot.db.get_maps_gamemode(Gamemode.CTF)
+
+        # Get team roles
+        team1_role = discord.utils.get(self.guild.roles, id= int(team1['role_id']))
+        team2_role = discord.utils.get(self.guild.roles, id= int(team2['role_id']))
+
+        ts_map1, ts_map2 = await self.banuntil2_tsonly(team1, team2, channel)
+
+        # Add maps to DB
+        self.bot.db.create_fixture_map(fixture_info['id'], ts_map1['id'])
+        self.bot.db.create_fixture_map(fixture_info['id'], ts_map2['id'])
+
+        # Set fixture to on-going
+        self.bot.db.edit_fixture(id=fixture_info['id'], status=FixtureStatus.InProgress)
+
+        # Remove busy status
+        self.bot.fixtures_busy.remove(channel.id)
+
+        # Notify
+        await channel.send(self.bot.quotes['cmdPickBan_bo2_tsonly_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name']))
 
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
@@ -873,6 +911,145 @@ class Fixtures(commands.Cog):
             await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map['name'], gamemode=gamemode))
 
         return picked_map  
+
+    async def banuntil2_tsonly(self, team1, team2, channel):
+
+        team_toban = team1
+
+        # Get maps
+        maps = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        maps.sort(key=lambda x: x['name'])
+
+        embed_title = f"TS Maps"
+
+        # Send embeds with the remaining maps
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        number_of_bans = 0
+        while number_of_bans < 4:
+            # Prompt the ban
+            pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+            pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_ban'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+
+            # Get banning team role
+            team_toban_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+            ban_check = False
+            while not ban_check:
+                interaction_ban = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+                map_toban = maps[int(interaction_ban.component[0].value)]
+                user_clicking = discord.utils.get(self.guild.members, id=interaction_ban.author.id)
+                if not team_toban_role in user_clicking.roles:
+                    await interaction_ban.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+                    continue
+
+                # Ask confirmation
+                await interaction_ban.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_confirmation'].format(mapname=map_toban['name']), components=[[
+                                            Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                            Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+                interaction_banconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_ban.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+                if interaction_banconfirmation.component.id == 'button_pickban_no':
+                    continue
+                elif interaction_banconfirmation.component.id == 'button_pickban_yes':
+                    ban_check = True
+
+            await interaction_banconfirmation.respond(type=6)
+            # Ban the map
+            maps.remove(map_toban)
+
+            # Edit embed and delete prompt
+            await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name'], teamname=team_toban['name']))
+            map_embed = embeds.map_list(maps, embed_title)
+            await channel.send(embed=map_embed)
+            await pickban_prompt_msg.delete()
+
+            # Switch banning team
+            if team_toban == team1:
+                team_toban = team2
+            else:
+                team_toban = team1
+
+            number_of_bans +=1
+
+        # Pick between the last two maps
+        # Prompt the pick 1
+        pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+        pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_pick'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+        team_topick_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+        pick_check = False
+        while not pick_check:
+            interaction_pick = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+            picked_map1 = maps[int(interaction_pick.component[0].value)]
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_pick.author.id)
+            if not team_topick_role in user_clicking.roles:
+                await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+                continue
+
+            # Ask confirmation
+            await interaction_pick.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_pick_confirmation'].format(mapname=picked_map1['name']), components=[[
+                                        Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                        Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+            interaction_pickconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_pick.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+            if interaction_pickconfirmation.component.id == 'button_pickban_no':
+                continue
+            elif interaction_pickconfirmation.component.id == 'button_pickban_yes':
+                pick_check = True
+
+        # Switch banning team
+        if team_toban == team1:
+            team_toban = team2
+        else:
+            team_toban = team1
+
+        # Delete prompt
+        await pickban_prompt_msg.delete()
+
+        # Edit embed 
+        await channel.send(self.bot.quotes['cmdPickBan_ban_success'].format(mapname=map_toban['name'], teamname=team_toban['name']))
+        map_embed = embeds.map_list(maps, embed_title)
+        await channel.send(embed=map_embed)
+
+        maps.remove(picked_map1)
+
+        await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map1['name'], gamemode=Gamemode.TS))
+
+        # Prompt the pick 2
+        pickban_dropmenu = dropmenus.maps(maps, "pickban_ts")
+        pickban_prompt_msg = await channel.send(self.bot.quotes['cmdPickBan_prompt_pick'].format(team_role_id=team_toban['role_id']), components=pickban_dropmenu)
+        team_topick_role = discord.utils.get(self.guild.roles, id= int(team_toban['role_id']))
+
+        pick_check = False
+        while not pick_check:
+            interaction_pick = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts" and i.message.channel.id == channel.id)
+            picked_map2 = maps[int(interaction_pick.component[0].value)]
+            user_clicking = discord.utils.get(self.guild.members, id=interaction_pick.author.id)
+            if not team_topick_role in user_clicking.roles:
+                await interaction_pick.respond(content=self.bot.quotes['cmdPickBan_error_wrong_team_click'].format(teamname=team_toban['name']))
+                continue
+
+            # Ask confirmation
+            await interaction_pick.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBan_pick_confirmation'].format(mapname=picked_map2['name']), components=[[
+                                        Button(style=ButtonStyle.green, label="Yes", custom_id="button_pickban_yes"),
+                                        Button(style=ButtonStyle.red, label="No", custom_id="button_pickban_no"),]])
+            interaction_pickconfirmation = await self.bot.wait_for("button_click", check = lambda i: i.user.id == interaction_pick.author.id and i.component.id.startswith("button_pickban_") and i.message.channel.id == channel.id)
+
+            if interaction_pickconfirmation.component.id == 'button_pickban_no':
+                continue
+            elif interaction_pickconfirmation.component.id == 'button_pickban_yes':
+                pick_check = True
+
+        await interaction_pickconfirmation.respond(type=6)
+
+        # Delete prompt
+        await pickban_prompt_msg.delete()
+
+        await channel.send(self.bot.quotes['cmdPickBan_pick_success'].format(mapname=picked_map2['name'], gamemode=Gamemode.TS))
+
+        return picked_map1, picked_map2  
 
     async def banuntil2_get2(self, mapadvantage_ctf, mapadvantage_ts, channel, gamemode):
         if gamemode == Gamemode.TS:

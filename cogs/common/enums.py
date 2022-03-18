@@ -7,6 +7,7 @@ class FixtureFormat(str, Enum):
     BO5 = 'BO5'
     BO3UTWC =  'UTWC BO3'
     BO5UTWC =  'UTWC BO5'
+    BO2TSONLY = 'TS BO2'
 
 class FixtureTitle(str, Enum):
     Null =  'None'
