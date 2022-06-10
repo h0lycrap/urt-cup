@@ -29,11 +29,7 @@ class Cups(commands.Cog):
         is_admin = interaction.component.id.split("_")[-2] == "admin"
 
         # Get cup info
-        cup_info = self.bot.db.get_cup(id=cup_id)
-
-        if not cup_info:
-            # Get cup info from the channel id
-            cup_info = self.bot.db.get_cup(chan_admin_id=interaction.message.channel.id)
+        cup_info = self.bot.db.get_cup(chan_admin_id=interaction.message.channel.id)
 
         if interaction.component.id.startswith("button_signup_"):
             await self.signup(cup_info, user, user_info, is_admin, interaction)

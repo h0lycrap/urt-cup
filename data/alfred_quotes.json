@@ -276,6 +276,7 @@
 	"cmdPickBan_pick_success" : "The map ``{mapname}`` in **{gamemode}** will be played.",
 	"cmdPickBan_bo2_end" : "You can now start the game, the team ``{teamname}`` will choose which gamemode is played first. The game is ``{tsmap}`` **TS** and ``{ctfmap}`` **CTF**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
 	"cmdPickBan_bo2_tsonly_end" : "You can now start the game, the team ``{teamname}`` will choose which map is played first. The game is ``{tsmap1}`` and ``{tsmap2}`` **TS**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
+	"cmdPickBan_bo5_tsonly_end" : "You can now start the game, the team ``{teamname}`` will choose which map is played first. The loser of each map decides which map is played next and on which server. The game is ``{tsmap1}``, ``{tsmap2}``, ``{tsmap3}`` and ``{tsmap4}`` **TS**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
 	"cmdPickBan_bo5_end" : "You can now start the game, the team ``{teamname}`` will choose which gamemode is played first, and the loser of each game choses the next map. The game is ``{tsmap1}``, ``{tsmap2}`` **TS** and ``{ctfmap1}``, ``{ctfmap2}`` **CTF**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>. \n **PLEASE UPLOAD THE SCOREBOARD SCREENSHOTS ON THIS CHANNEL ONCE YOU ARE DONE**\n\n GL & HF!",
 	"cmdPickBan_bo3_utcw_same_gamemode_end" : "You can now start the game, the team ``{teamname}`` will choose which map is played first. The game is ``{map1}``, ``{map2}`` **{gamemode}**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>.\n\n GL & HF!",
 	"cmdPickBan_bo5_utcw_same_gamemode_end" : "You can now start the game, the team ``{teamname}`` will choose which map is played first. The game is ``{map1}``, ``{map2}``, ``{map3}``, ``{map4}`` **{gamemode}**. Once you are done, don't forget to upload your __**demos**__ and __**MOSS**__ on <https://urt.li/#flawless>.\n\n GL & HF!",
@@ -297,6 +298,7 @@
 	"cmdEnterScores_prompt_players" : "Click on each player of the team ``{teamname}`` that played the game (include subs). Click another time to deselect them. \nOnce all of the players have been selected, click on **Validate**.",
 	"cmdEnterScores_players_success" : "Players saved.",
 	"cmdEnterScores_success" : "Scores were entered for the fixture ``{team1name}`` vs ``{team2name}``",
+	"cmdEnterScores_prompt_server" : "Was the game played on a flawless server?",
 	
 
 	"cmdChangeMap_prompt_map" : "What map will be played for **{gamemode}**",

@@ -446,9 +446,13 @@ class Database():
         return self.cursor.fetchall()
 
 #----FixturePlayers--------------------------------------------------------------------------------------------------------------------------------------------------------------------#
-    def create_fixture_player(self, fixture_id, player_id):
-        self.cursor.execute("INSERT INTO FixturePlayer (fixture_id, player_id) VALUES (%s, %s)", (fixture_id, player_id))
-        self.conn.commit()
+    def create_fixture_player(self, fixture_id, player_id, demos_uploaded=True):
+        if demos_uploaded:
+            self.cursor.execute("INSERT INTO FixturePlayer (fixture_id, player_id, uploaded_demo) VALUES (%s, %s, %s)", (fixture_id, player_id, 1))
+            self.conn.commit()
+        else:
+            self.cursor.execute("INSERT INTO FixturePlayer (fixture_id, player_id) VALUES (%s, %s)", (fixture_id, player_id))
+            self.conn.commit()
 
     def delete_fixture_players(self, fixture_id):
         self.cursor.execute("DELETE FROM FixturePlayer WHERE fixture_id = %s", (fixture_id,))
@@ -632,9 +636,6 @@ class Database():
         sql = "UPDATE Divisions SET "
         params = ()
 
-        if format != None:
-            sql += "format = %s "
-            params += (format,)
         if embed_id != None:
             if len(params) > 0:
                 sql += ", "
