@@ -44,14 +44,54 @@ async def update_roster(bot, admin_managed):
             roster_message = await roster_channel.fetch_message(team['roster_message_id'])
             await roster_message.edit(embed=embed)
         except:
-            # Delete index message
-            if index_message:
-                await index_message.delete()
-                index_message = None
+            pass
+            #  Delete index message
+            # if index_message:
+            #     await index_message.delete()
+            #     index_message = None
+            #
+            # # Send new message and store message id
+            # new_roster_msg = await roster_channel.send(embed=embed)
+            # bot.db.edit_clan(tag=team['tag'], roster_message_id=str(new_roster_msg.id))
 
-            # Send new message and store message id
-            new_roster_msg = await roster_channel.send(embed=embed)
-            bot.db.edit_clan(tag=team['tag'], roster_message_id=str(new_roster_msg.id))
+    # Post or edit team index
+    index_embed = await embeds.team_index(bot, admin_managed)
+    if index_message:
+        await index_message.edit(embed=index_embed)
+    # else:
+    #     await roster_channel.send(embed=index_embed)
+
+async def post_roster(bot, admin_managed, team_id, post_all=False):
+    # Get team
+    team = bot.db.get_clan(id=team_id)
+    # Get channel
+    channel_id = bot.channel_roster_id
+    if admin_managed == 1:
+        channel_id = bot.channel_roster_national_teams_id
+    roster_channel = discord.utils.get(bot.guilds[0].channels, id=channel_id)
+
+    # get index message if any
+    roster_channel_messages = await roster_channel.history(limit=5).flatten()
+    index_message = None
+    for message in roster_channel_messages:
+        if not message.embeds:
+            continue
+        if message.embeds[0].title.startswith(":pencil: Clan index"):
+            index_message = message
+    # Delete index message
+    if index_message:
+        await index_message.delete()
+        index_message = None
+
+    # Send new message and store message id
+    # Generate the embed
+    embed, insuficient_roster = embeds.team(bot, tag=team['tag'])
+    new_roster_msg = await roster_channel.send(embed=embed)
+    bot.db.edit_clan(tag=team['tag'], roster_message_id=str(new_roster_msg.id))
+
+    # Don't post the index if we are reposting everything
+    if post_all:
+        return
 
     # Post or edit team index
     index_embed = await embeds.team_index(bot, admin_managed)
@@ -59,6 +99,7 @@ async def update_roster(bot, admin_managed):
         await index_message.edit(embed=index_embed)
     else:
         await roster_channel.send(embed=index_embed)
+
 
 
 async def signups(bot):
@@ -89,9 +130,10 @@ async def signups(bot):
             await signup_message.edit(embed=embed, components=signup_button)
 
         except:
+            pass
             # Send new message and store message id
-            new_signup_msg = await signup_channel.send(embed=embed, components=signup_button)
-            bot.db.edit_cup(id=cup_info['id'], signup_message_id=str(new_signup_msg.id))
+            # new_signup_msg = await signup_channel.send(embed=embed, components=signup_button)
+            # bot.db.edit_cup(id=cup_info['id'], signup_message_id=str(new_signup_msg.id))
 
         # Check if there are divs
         divisions = bot.db.get_all_divisions(cup_info['id'])
@@ -107,9 +149,10 @@ async def signups(bot):
                     await division_message.edit(embed=division_embed)
 
                 except:
-                    # Send new message and store message id
-                    new_division_msg = await stage_channel.send(embed=division_embed)
-                    bot.db.edit_division(id=division['id'], embed_id=str(new_division_msg.id))
+                    pass
+                    # # Send new message and store message id
+                    # new_division_msg = await stage_channel.send(embed=division_embed)
+                    # bot.db.edit_division(id=division['id'], embed_id=str(new_division_msg.id))
 
 
 async def fixtures(bot):

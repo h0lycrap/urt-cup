@@ -68,6 +68,8 @@ class Fixtures(commands.Cog):
             await self.update_streamer_needed(interaction)
         elif interaction.component.id.startswith("shoutcast_avi_button"):
             await self.update_streamer_needed(interaction, shoutcast=True)
+        elif interaction.component.id.startswith("button_launch_ac"):
+            await self.launch_ac(interaction)
 
     async def create_fixture(self, interaction):
         # Get which cup this is from 
@@ -343,6 +345,9 @@ class Fixtures(commands.Cog):
 
 
     async def pickban_invitation(self, interaction):
+        # NEW SEASON
+        # await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_notavi'])
+        # return
         # Check if fixture busy
         if interaction.message.channel.id in self.bot.fixtures_busy:
             await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdPickBanInvitation_error_busy'])
@@ -505,13 +510,13 @@ class Fixtures(commands.Cog):
                 await self.pickban_draw_utwc(fixture_info, team_button, other_team_button, interaction.message.channel)
                 return 
 
-            if (fixture_info['format'] == FixtureFormat.BO2.value or fixture_info['format'] == FixtureFormat.BO3.value):
-                await self.pickban_bo2_tsonly(fixture_info, team_button, other_team_button, interaction.message.channel) ######
+            if (fixture_info['format'] == FixtureFormat.BO2.value or fixture_info['format'] == FixtureFormat.BO3.value or fixture_info['format'] == FixtureFormat.BO3CTF.value):
+                await self.pickban_bo2_monomode(fixture_info, team_button, other_team_button, interaction.message.channel) ######
             if (fixture_info['format'] == FixtureFormat.BO2TSONLY.value):
-                await self.pickban_bo2_tsonly(fixture_info, team_button, other_team_button, interaction.message.channel)
-            if (fixture_info['format'] == FixtureFormat.BO5.value):
-                await self.pickban_bo5_tsonly(fixture_info, team_button, other_team_button, interaction.message.channel) ######
-            if (fixture_info['format'] == FixtureFormat.BO3.value or fixture_info['format'] == FixtureFormat.BO5.value):
+                await self.pickban_bo2_monomode(fixture_info, team_button, other_team_button, interaction.message.channel)
+            if (fixture_info['format'] == FixtureFormat.BO5.value or fixture_info['format'] == FixtureFormat.BO5CTF.value):
+                await self.pickban_bo5_monomode(fixture_info, team_button, other_team_button, interaction.message.channel) ######
+            if (fixture_info['format'] == FixtureFormat.BO3.value or fixture_info['format'] == FixtureFormat.BO5.value or fixture_info['format'] == FixtureFormat.BO3CTF.value or fixture_info['format'] == FixtureFormat.BO5CTF.value):
                 await interaction.message.channel.send(self.bot.quotes['cmdPickBan_Prompt_draw'], components=[[Button(style=ButtonStyle.blue, label="Draw", custom_id="button_pickban_draw_utwc")]]) ####
             if (fixture_info['format'] == FixtureFormat.BO3UTWC.value):
                 await self.pickban_bo3_utwc_same_gamemode(fixture_info, team_button, other_team_button, interaction.message.channel, gamemode)
@@ -618,37 +623,47 @@ class Fixtures(commands.Cog):
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
 
-    async def pickban_bo2_tsonly(self, fixture_info, team1, team2, channel):
+    async def pickban_bo2_monomode(self, fixture_info, team1, team2, channel):
 
         # Get map lists
-        ts_map_list = self.bot.db.get_maps_gamemode(Gamemode.TS)
-        ctf_map_list = self.bot.db.get_maps_gamemode(Gamemode.CTF)
+        maplist = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        mode = "TS"
+        if fixture_info['format'] == FixtureFormat.BO3CTF.value:
+            maplist = self.bot.db.get_maps_gamemode(Gamemode.CTF)
+            mode = "CTF"
 
         # Get team roles
         team1_role = discord.utils.get(self.guild.roles, id= int(team1['role_id']))
         team2_role = discord.utils.get(self.guild.roles, id= int(team2['role_id']))
 
-        ts_map1, ts_map2 = await self.banuntil2_tsonly(team1, team2, channel)
+        ts_map1, ts_map2 = await self.banuntil2_monomode(team1, team2, channel, maplist)
 
         # Add maps to DB
         self.bot.db.create_fixture_map(fixture_info['id'], ts_map1['id'])
         self.bot.db.create_fixture_map(fixture_info['id'], ts_map2['id'])
 
-        # Set fixture to on-going
+        # Set fixture to ongoing
         self.bot.db.edit_fixture(id=fixture_info['id'], status=FixtureStatus.InProgress)
 
         # Remove busy status
         self.bot.fixtures_busy.remove(channel.id)
 
         # Notify
-        await channel.send(self.bot.quotes['cmdPickBan_bo2_tsonly_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name']))
+        await channel.send(self.bot.quotes['cmdPickBan_bo2_tsonly_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name'], mode=mode))
 
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
 
-    async def pickban_bo5_tsonly(self, fixture_info, team1, team2, channel):
+    async def pickban_bo5_monomode(self, fixture_info, team1, team2, channel):
 
-        ts_map1, ts_map2, ts_map3, ts_map4 = await self.banuntil4_tsonly(team1, team2, channel)
+        # Get map lists
+        maplist = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        mode = "TS"
+        if fixture_info['format'] == FixtureFormat.BO5CTF.value:
+            maplist = self.bot.db.get_maps_gamemode(Gamemode.CTF)
+            mode = "CTF"
+
+        ts_map1, ts_map2, ts_map3, ts_map4 = await self.banuntil4_monomode(team1, team2, channel, maplist)
 
         # Add maps to DB
         self.bot.db.create_fixture_map(fixture_info['id'], ts_map1['id'])
@@ -663,7 +678,7 @@ class Fixtures(commands.Cog):
         self.bot.fixtures_busy.remove(channel.id)
 
         # Notify
-        await channel.send(self.bot.quotes['cmdPickBan_bo5_tsonly_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name'], tsmap3=ts_map3['name'], tsmap4=ts_map4['name']))
+        await channel.send(self.bot.quotes['cmdPickBan_bo5_tsonly_end'].format(teamname=team1['name'], tsmap1=ts_map1['name'], tsmap2=ts_map2['name'], tsmap3=ts_map3['name'], tsmap4=ts_map4['name'], mode=mode))
 
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))
@@ -934,15 +949,13 @@ class Fixtures(commands.Cog):
 
         return picked_map  
 
-    async def banuntil2_tsonly(self, team1, team2, channel):
+    async def banuntil2_monomode(self, team1, team2, channel, maps):
 
         team_toban = team2
 
-        # Get maps
-        maps = self.bot.db.get_maps_gamemode(Gamemode.TS)
         maps.sort(key=lambda x: x['name'])
 
-        embed_title = f"TS Maps"
+        embed_title = f"Maps"
 
         # Send embeds with the remaining maps
         map_embed = embeds.map_list(maps, embed_title)
@@ -1074,12 +1087,10 @@ class Fixtures(commands.Cog):
         return picked_map1, picked_map2  
 
 
-    async def banuntil4_tsonly(self, team1, team2, channel):
+    async def banuntil4_monomode(self, team1, team2, channel, maps):
 
         team_toban = team2
 
-        # Get maps
-        maps = self.bot.db.get_maps_gamemode(Gamemode.TS)
         maps.sort(key=lambda x: x['name'])
 
         embed_title = f"TS Maps"
@@ -1620,21 +1631,25 @@ class Fixtures(commands.Cog):
     async def pickban_draw_utwc(self, fixture_info, team1, team2, channel):
 
         # Get map lists
-        ts_map_list = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        gm =Gamemode.TS
+        if fixture_info['format'] == FixtureFormat.BO3CTF.value or fixture_info['format'] == FixtureFormat.BO5CTF.value:
+            gm = Gamemode.CTF
+
+        map_list = self.bot.db.get_maps_gamemode(gm)
+
 
         # Remove played maps
         maps_played = self.bot.db.get_fixture_maps(fixture_info['id'])
         for map_played in maps_played:
             map = self.bot.db.get_map(map_played['map_id'])
-            if map in ts_map_list:
-                ts_map_list.remove(map)
+            if map in map_list:
+                map_list.remove(map)
 
-        print(ts_map_list)
 
-        if len(ts_map_list) % 2 == 1:
-            picked_map = await self.banuntil2(team2, team1, channel, Gamemode.TS, draw=True, maps=ts_map_list)
+        if (len(map_list) % 2 == 1 and gm == Gamemode.TS)  or (len(map_list) % 2 != 1 and gm == Gamemode.CTF):
+            picked_map = await self.banuntil2(team2, team1, channel, gm, draw=True, maps=map_list)
         else:
-            picked_map = await self.banuntil2(team1, team2, channel, Gamemode.TS, draw=True, maps=ts_map_list)
+            picked_map = await self.banuntil2(team1, team2, channel, gm, draw=True, maps=map_list)
 
         # Add map to DB
         self.bot.db.create_fixture_map(fixture_info['id'], picked_map['id'])
@@ -1643,7 +1658,7 @@ class Fixtures(commands.Cog):
         self.bot.fixtures_busy.remove(channel.id)
 
         # Notify
-        await channel.send(self.bot.quotes['cmdPickBan_draw_end'].format(teamname=team1['name'], gamemode=Gamemode.TS, map=picked_map['name']))
+        await channel.send(self.bot.quotes['cmdPickBan_draw_end'].format(teamname=team1['name'], gamemode=gm, map=picked_map['name']))
 
         # Update fixtures
         self.bot.async_loop.create_task(update.fixtures(self.bot))  
@@ -1740,12 +1755,11 @@ class Fixtures(commands.Cog):
         self.bot.users_busy.remove(interaction.author.id)
 
         gameschedule = str(datetime.datetime.combine(gamedate_formatted, gametime_formatted))
+        timestamp = utils.get_timestamp(gameschedule)
 
 
-        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_invitation'].format(roleid=other_team_info['role_id'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime), components=
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_invitation'].format(roleid=other_team_info['role_id'], teamname=team_info['name'], timestamp=timestamp), components=
             [[
-            Button(style=5, label="Convert to your timezone", url=utils.timezone_link(gameschedule), custom_id="button_schedule_timezone_link")],
-            [
             Button(style=ButtonStyle.green, label="Accept", custom_id=f"button_accept_fixture_schedule_{other_team_info['id']}_{gameschedule}"),
             Button(style=ButtonStyle.red, label="Decline", custom_id=f"button_decline_fixture_schedule_{other_team_info['id']}_{gameschedule}")
             ]])
@@ -1755,7 +1769,7 @@ class Fixtures(commands.Cog):
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
-        await log_channel.send(self.bot.quotes['cmdSchedule_invitation_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+        await log_channel.send(self.bot.quotes['cmdSchedule_invitation_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], timestamp=timestamp))
 
 
     async def schedule_fixture_admin(self, interaction):
@@ -1824,17 +1838,16 @@ class Fixtures(commands.Cog):
 
         gameschedule = datetime.datetime.combine(gamedate_formatted, gametime_formatted)
         gamedate_str = str(gameschedule)
+        timestamp = utils.get_timestamp(gamedate_str)
 
         # Send Streamer needed message  
         stream_avi_msg = await self.send_streamer_needed_msg(fixture_info, team_info, other_team_info, gameschedule)
 
         # Update in DB
-        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled, stream_avi_msg=stream_avi_msg.id)
+        self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.InProgress, stream_avi_msg=stream_avi_msg.id) ###################
 
         # Notify
-        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_admin'].format(otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime), components=[[
-            Button(style=5, label="Convert to your timezone", url=utils.timezone_link(gamedate_str), custom_id="button_schedule_timezone_link")
-        ]])
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_admin'].format(otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], timestamp=timestamp))
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
@@ -1843,7 +1856,7 @@ class Fixtures(commands.Cog):
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
-        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_admin_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime))
+        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_admin_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], timestamp=timestamp))
 
     async def schedule_accept(self, interaction):
         # Get fixture info
@@ -1871,6 +1884,7 @@ class Fixtures(commands.Cog):
         gamedate = datetime.date.fromisoformat(gamedate_str.split()[0])
         gametime = datetime.time.fromisoformat(gamedate_str.split()[1])
         gameschedule = str(datetime.datetime.combine(gamedate, gametime))
+        timestamp = utils.get_timestamp(gamedate_str)
         
         # Check if the other team clicked
         invited_team_id = interaction.component.id.split("_")[-2]
@@ -1887,9 +1901,9 @@ class Fixtures(commands.Cog):
         self.bot.db.edit_fixture(id=fixture_info['id'], date=gamedate_str, status=FixtureStatus.Scheduled, stream_avi_msg=stream_avi_msg.id)
 
         # Notify
-        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_success'].format(teamname=team_info['name'],otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], gamedate=gamedate, gametime=gametime), components=[[
-            Button(style=5, label="Convert to your timezone", url=utils.timezone_link(gameschedule), custom_id="button_schedule_timezone_link")
-        ]])
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_accepted_success'].format(teamname=team_info['name'],otherroleid=other_team_info['role_id'], roleid=team_info['role_id'], timestamp=timestamp))
+        #    Button(style=5, label="Convert to your timezone", url=utils.timezone_link(gameschedule), custom_id="button_schedule_timezone_link")
+
 
         await interaction.message.delete()
 
@@ -1900,7 +1914,7 @@ class Fixtures(commands.Cog):
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
-        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime, username=user_info['ingame_name']))
+        await log_channel.send(self.bot.quotes['cmdSchedule_accepted_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], timestamp=timestamp, username=user_info['ingame_name']))
 
     async def schedule_decline(self, interaction):
         # Get fixture info
@@ -1923,9 +1937,7 @@ class Fixtures(commands.Cog):
 
         # Get fixture date
         gamedate_str = interaction.component.id.split("_")[-1]
-        gamedate = datetime.date.fromisoformat(gamedate_str.split()[0])
-        gametime = datetime.time.fromisoformat(gamedate_str.split()[1])
-        gameschedule = datetime.datetime.combine(gamedate, gametime)
+        timestamp = utils.get_timestamp(gamedate_str)
         
         # Check if the other team clicked
         invited_team_id = interaction.component.id.split("_")[-2]
@@ -1936,14 +1948,14 @@ class Fixtures(commands.Cog):
         await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdSchedule_declined'])
 
         # Notify
-        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_declined_success'].format(otherroleid=other_team_info['role_id'], gamedate=gamedate, gametime=gametime))
+        await interaction.message.channel.send(self.bot.quotes['cmdSchedule_declined_success'].format(otherroleid=other_team_info['role_id'], timestamp=timestamp))
 
         await interaction.message.delete()
 
 
         # Log
         log_channel =  discord.utils.get(self.guild.channels, id=self.bot.channel_log_id)
-        await log_channel.send(self.bot.quotes['cmdSchedule_declined_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], gamedate=gamedate, gametime=gametime, username=user_info['ingame_name']))
+        await log_channel.send(self.bot.quotes['cmdSchedule_declined_log'].format(otherteamname=other_team_info['name'], teamname=team_info['name'], timestamp=timestamp, username=user_info['ingame_name']))
 
     async def enter_scores(self, interaction):
         # Get fixture info
@@ -2237,29 +2249,29 @@ class Fixtures(commands.Cog):
         # TODO: Implement BO3 and BO5
         # Get the TS map
         # Get maps
-        maps_ts = self.bot.db.get_maps_gamemode(Gamemode.TS)
-        maps_ctf = self.bot.db.get_maps_gamemode(Gamemode.TS)
-        maps_ts.sort(key=lambda x: x['name'])
-        maps_ctf.sort(key=lambda x: x['name'])
+        maps = self.bot.db.get_maps_gamemode(Gamemode.TS)
+        if "CTF" in fixture_info['format']:
+            maps = self.bot.db.get_maps_gamemode(Gamemode.CTF)
+        maps.sort(key=lambda x: x['name'])
 
-        pickban_dropmenu_ts = dropmenus.maps(maps_ts, "pickban_ts")
-        pickban_dropmenu_ctf = dropmenus.maps(maps_ctf, "pickban_ctf")
+        pickban_dropmenu_1 = dropmenus.maps(maps, "pickban_1")
+        pickban_dropmenu_2 = dropmenus.maps(maps, "pickban_2")
 
         #Prompt for TS
-        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeMap_prompt_map'].format(gamemode="TS"), components=pickban_dropmenu_ts)
-        interaction_map_ts = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ts")
-        map_ts = maps_ts[int(interaction_map_ts.component[0].value)]
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeMap_prompt_map'].format(gamemode=fixture_info['format']), components=pickban_dropmenu_1)
+        interaction_map_1 = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_1")
+        map_1 = maps[int(interaction_map_1.component[0].value)]
 
         #Prompt for CTF
-        await interaction_map_ts.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeMap_prompt_map'].format(gamemode="CTF"), components=pickban_dropmenu_ctf)
-        interaction_map_ctf = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_ctf")
-        map_ctf = maps_ctf[int(interaction_map_ctf.component[0].value)]
+        await interaction_map_1.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdChangeMap_prompt_map'].format(gamemode=fixture_info['format']), components=pickban_dropmenu_2)
+        interaction_map_2 = await self.bot.wait_for("select_option", check = lambda i: i.parent_component.id == "pickban_2")
+        map_2 = maps[int(interaction_map_2.component[0].value)]
 
         # Check if pick and ban has been done
         if not fixture_info['status'] or int(fixture_info['status']) == 1:
             # Add maps to DB
-            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_ts['id'])
-            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_ctf['id'])
+            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_1['id'])
+            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_2['id'])
 
             # Set fixture to on-going
             self.bot.db.edit_fixture(fixture_info['id'], status=FixtureStatus.InProgress)
@@ -2268,10 +2280,10 @@ class Fixtures(commands.Cog):
             self.bot.db.delete_fixture_maps(fixture_info['id'])
             
             # Add maps to DB
-            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_ts['id'])
-            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_ctf['id'])
+            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_1['id'])
+            self.bot.db.create_fixture_map(fixture_id=fixture_info['id'], map_id=map_2['id'])
 
-        await interaction_map_ctf.respond(type=InteractionType.ChannelMessageWithSource, content="Success!")
+        await interaction_map_2.respond(type=InteractionType.ChannelMessageWithSource, content="Success!")
 
         # Update embed
         embed_message = await interaction.channel.fetch_message(fixture_info['embed_id'])
@@ -2324,7 +2336,22 @@ class Fixtures(commands.Cog):
         strm_embed = embeds.streamer_avi(team1_info, team2_info, str(gameschedule))
         return await need_streamer_channel.send(self.bot.quotes['cmdCreateFixtures_need_streamer'].format(role_streamer=role_streamer.id, gamechannel=fixture_info['channel_id']), embed=strm_embed, components=btn_stream)
 
-        
+    async def launch_ac(self, interaction):
+        # Get infos
+        fixture_info = self.bot.db.get_fixture(channel_id=interaction.message.channel.id)
+        user_info = self.bot.db.get_player(discord_id=interaction.author.id)
+        cup_info = self.bot.db.get_cup(id=fixture_info['cup_id'])
+
+        ftw_log = await self.bot.ftw.launch_ac(cup_info['ftw_cup_id'], fixture_info['ftw_match_id'], interaction.author.id)
+
+        if ftw_log:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=str(ftw_log['detail']))
+        else:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Launch successful!")
+
+
+
+
 
 def setup(bot):
     bot.add_cog(Fixtures(bot))

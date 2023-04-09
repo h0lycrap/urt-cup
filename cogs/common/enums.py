@@ -5,9 +5,14 @@ class FixtureFormat(str, Enum):
     BO2 = 'BO2'
     BO3 = 'BO3'
     BO5 = 'BO5'
+    BO3CTF = 'CTF BO3'
+    BO5CTF = 'CTF BO5'
+    BO3TS = 'TS BO3'
+    BO5TS = 'TS BO5'
     BO3UTWC =  'UTWC BO3'
     BO5UTWC =  'UTWC BO5'
     BO2TSONLY = 'TS BO2'
+    BO2CTFONLY = 'CTF BO2'
 
 class FixtureTitle(str, Enum):
     Null =  'None'

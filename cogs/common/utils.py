@@ -6,6 +6,8 @@ import datetime
 import re
 import emoji
 import mariadb
+import time
+import calendar
 
 # Check if the auth exists on urt.info
 def check_auth(auth):
@@ -73,3 +75,6 @@ def create_abbreviation(words: str) -> str:
         abbreviation += word[0]
 
     return abbreviation.upper()
+
+def get_timestamp(date):
+    return int(calendar.timegm(time.strptime(date.split(".")[0], '%Y-%m-%d %H:%M:%S')))

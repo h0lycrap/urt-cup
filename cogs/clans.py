@@ -64,10 +64,10 @@ class Clans(commands.Cog):
 
             clan_to_edit = self.bot.db.get_clan(tag=clan_tag)
 
-            # Check if the clan is signed up for a cup
-            if self.bot.db.clan_in_active_cup(clan_to_edit['id']) and not is_admin:
-                await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdEditClan_error_blocked_edit'])
-                return
+            # Check if the clan is signed up for a cup ###################TEMPORARY############################
+            # if self.bot.db.clan_in_active_cup(clan_to_edit['id']) and not is_admin:
+            #     await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=self.bot.quotes['cmdEditClan_error_blocked_edit'])
+            #     return
 
             # Launch the action
             if interaction.component.id.startswith("button_edit_clan_addplayer"):
@@ -335,7 +335,7 @@ class Clans(commands.Cog):
         self.bot.users_busy.remove(user.id)
 
         # Update roster
-        self.bot.async_loop.create_task(update.roster(self.bot))
+        self.bot.async_loop.create_task(update.post_roster(self.bot, admin_managed, team_id))
 
     async def add_player(self, team_toedit, user, interaction, is_admin=False):
         # Flag the user as busy

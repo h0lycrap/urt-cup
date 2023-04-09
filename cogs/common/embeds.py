@@ -309,6 +309,7 @@ async def signup(bot, cup_id):
 async def division(bot, cup_id, div_number):
     # Fetch signed up teams
     team_signup_infos = bot.db.get_cup_signups(cup_id=cup_id, div_number=div_number)
+    cup_info = bot.db.get_cup(id=cup_id)
 
     tag_string = ""
     score_string = ""
@@ -355,7 +356,9 @@ async def division(bot, cup_id, div_number):
     embed.add_field(name="Team", value= tag_string, inline=True)
     embed.add_field(name="W/D/L", value= wdl_string, inline=True)
     embed.add_field(name="Points", value= score_string, inline=True)
-    embed.description = "Detailed ranking: [Click here](https://ggle.io/4JC0)"
+    embed.description = "Detailed ranking: [Click here](https://ggle.io/5Vou)"
+    if "CTF" in cup_info['name']:
+        embed.description = "Detailed ranking: [Click here](https://ggle.io/5Vp8)"
 
     return embed
 
@@ -391,30 +394,20 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
     # Get maps info
     maps = bot.db.get_fixture_maps(fixture_id)
 
-    ts_map_string = ""
-    ctf_map_string = ""
+    map_string = ""
     if maps:
         for map in maps:
             map_info = bot.db.get_map(map['map_id'])
-            if map_info['gamemode'] == "TS":
-                ts_map_string += f"{map_info['name']}\n"
-            else:
-                ctf_map_string += f"{map_info['name']}\n"
+            map_string += f"{map_info['name']}\n"
     
-    if len(ts_map_string) == 0:
-        ts_map_string = "-"
-    if len(ctf_map_string) == 0:
-        ctf_map_string = "-"
-
-
+    if len(map_string) == 0:
+        map_string = "-"
 
     # Get date and time if set yet
     if date:
-        fixture_schedule_elems = date.split(" ")
-        fixture_date_elems = fixture_schedule_elems[0].split('-')
-        fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}/{fixture_date_elems[0]}"
-        fixture_time_elems = fixture_schedule_elems[1].split(':')
-        fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]} [Convert]({utils.timezone_link(date)})"
+        timestamp = utils.get_timestamp(date)
+        fixture_date = f"<t:{timestamp}:d>"
+        fixture_time = f"<t:{timestamp}:t>"
     else:
         fixture_date = "-"
         fixture_time = "-"
@@ -434,30 +427,43 @@ async def fixture(bot, fixture_id=None, team1_id=None, team2_id=None, date=None,
 
     try:
         roster_message1 = await roster_channel.fetch_message(team1['roster_message_id'])
+        roster_message1 = roster_message1.jump_url
     except:
-        roster_message1 = await roster_channel2.fetch_message(team1['roster_message_id'])
+        try:
+            roster_message1 = await roster_channel2.fetch_message(team1['roster_message_id'])
+            roster_message1 = roster_message1.jump_url
+        except:
+            roster_message1 = ""
 
     try:
         roster_message2 = await roster_channel.fetch_message(team2['roster_message_id'])
+        roster_message2 = roster_message2.jump_url
     except:
-        roster_message2 = await roster_channel2.fetch_message(team2['roster_message_id'])
+        try:
+            roster_message2 = await roster_channel2.fetch_message(team2['roster_message_id'])
+            roster_message2 = roster_message2.jump_url
+        except:
+            roster_message2 = ""
+            
 
 
     #team_string = f"{team_flag} [{utils.prevent_discord_formating(team_tag)}]({roster_message.jump_url})\n"
 
-    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= f"**Format: **{format} \u200b \u200b **|** \u200b \u200b **Rosters**: [{utils.prevent_discord_formating(team1['tag'])}]({roster_message1.jump_url}) \u200b \u200b [{utils.prevent_discord_formating(team2['tag'])}]({roster_message2.jump_url})")
+    embed = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {utils.prevent_discord_formating(team1['tag'])} :black_small_square: vs :black_small_square: {utils.prevent_discord_formating(team2['tag'])} {flag.flagize(team2['country'])}", description= f"**Format: **{format} \u200b \u200b **|** \u200b \u200b **Rosters**: [{utils.prevent_discord_formating(team1['tag'])}]({roster_message1}) \u200b \u200b [{utils.prevent_discord_formating(team2['tag'])}]({roster_message2})")
     embed.add_field(name=":pencil: Status", value= status_str, inline=True)
     embed.add_field(name=":calendar_spiral: Date (D/M/Y)", value= fixture_date, inline=True)
-    embed.add_field(name=":alarm_clock: Time (UTC)", value= fixture_time, inline=True)
-    embed.add_field(name=":map: Map TS", value= ts_map_string, inline=True)
-    embed.add_field(name=":map: Map CTF", value= ctf_map_string, inline=True)
-    embed.add_field(name=":link: Demo and MOSS", value= f"https://urt.li/#flawless", inline=True)
+    embed.add_field(name=":alarm_clock: Time", value= fixture_time, inline=True)
+    embed.add_field(name=":map: Maps", value= map_string, inline=True)
+    embed.add_field(name=":link: MOSS", value= f"DM Holycrap", inline=True)
 
     components = [[
             Button(style=ButtonStyle.blue, label="Schedule", custom_id=f"button_fixture_schedule", emoji="\U0001F4C5"),
             Button(style=ButtonStyle.blue, label="Pick & ban", custom_id=f"button_fixture_startpickban", emoji="\U0001F5FA"),
             Button(style=ButtonStyle.blue, label="Request a server", custom_id=f"button_fixture_requestserver", emoji="\U0001F5A5"),
             Button(style=ButtonStyle.grey, label="Admin Panel", custom_id=f"button_edit_fixture")
+            ],
+            [
+            Button(style=ButtonStyle.green, label="Launch AC", custom_id=f"button_launch_ac", emoji="\U0001F3AE") 
             ]]
 
     return embed, components
@@ -631,11 +637,10 @@ def calendar(bot, cup_info):
 
     fixture_list = []
     date_list = []
+    TBD_date = 9999999999
     for fixture in fixtures:
         if fixture['status'] and int(fixture['status']) >= 3:
             continue
-
-        TBD_date = datetime.datetime(2040, 1, 1)
 
         team1 = bot.db.get_clan(id=fixture['team1'])
         team2 = bot.db.get_clan(id=fixture['team2'])
@@ -648,10 +653,7 @@ def calendar(bot, cup_info):
         if not fixture['status']:
             date_list.append(TBD_date)
         else:
-            gamedate = datetime.date.fromisoformat(fixture['date'].split()[0])
-            gametime = datetime.time.fromisoformat(fixture['date'].split()[1])
-            gameschedule = datetime.datetime.combine(gamedate, gametime)
-            date_list.append(gameschedule)
+            date_list.append(utils.get_timestamp(fixture['date']))
     
     sorted_index = sorted(range(len(date_list)), key=lambda k: date_list[k])
 
@@ -664,12 +666,7 @@ def calendar(bot, cup_info):
         fixture_str2 += f"{fixture_list[i][2]}  {fixture_list[i][3]}\n \n" 
 
         if date_list[i] != TBD_date:
-            fixture_schedule_elems = str(date_list[i]).split(" ")
-            fixture_date_elems = fixture_schedule_elems[0].split('-')
-            fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
-            fixture_time_elems = fixture_schedule_elems[1].split(':')
-            fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
-            date_str += f"{fixture_date}  -  {fixture_time} \n \n"
+            date_str += f"<t:{date_list[i]}:d>  -  <t:{date_list[i]}:t> \n \n"
         else:
             date_str += "--/--  -  --:-- \n \n"
             
@@ -694,7 +691,7 @@ def calendar(bot, cup_info):
 
     # Create the embed
     embed = discord.Embed(title=f":calendar_spiral: Calendar", color=13568619)
-    title1 = "\u200b \u200b Date *(UTC)* \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b\n \u200b"
+    title1 = "\u200b \u200b Date \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b\n \u200b"
     title2 = "\u200b \u200b \u200bTeam 1\u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b \u200b   VS  \u200b \u200b \u200b \n \u200b"
     title3 = "\u200b \u200b \u200bTeam 2 \n \u200b"
     if len(modules) == 0:
@@ -755,15 +752,8 @@ def results(bot, fixture_info, match_type):
 
 def streamer_avi(team1, team2, date, strmavi_list=[], shtavi_list=[]):
 
-    gamedate = datetime.date.fromisoformat(date.split()[0])
-    gametime = datetime.time.fromisoformat(date.split()[1])
-    gameschedule = datetime.datetime.combine(gamedate, gametime)
-    fixture_schedule_elems = str(gameschedule).split(" ")
-    fixture_date_elems = fixture_schedule_elems[0].split('-')
-    fixture_date = f"{fixture_date_elems[2]}/{fixture_date_elems[1]}"#/{fixture_date_elems[0]}"
-    fixture_time_elems = fixture_schedule_elems[1].split(':')
-    fixture_time = f"{fixture_time_elems[0]}:{fixture_time_elems[1]}"
-    date_str = f"{fixture_date}  -  {fixture_time}"
+    timestamp = utils.get_timestamp(date)
+    date_str = f"<t:{timestamp}:d>  -  <t:{timestamp}:t>"
 
     strmavi=""
     for streamerid in strmavi_list:
@@ -777,7 +767,7 @@ def streamer_avi(team1, team2, date, strmavi_list=[], shtavi_list=[]):
     if shtavi == "":
         shtavi="None"
     
-    e = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description=f":calendar_spiral: {date_str} UTC \n[Convert to your timezone]({utils.timezone_link(str(gameschedule))})")
+    e = discord.Embed(color=0xFFD700, title=f"{flag.flagize(team1['country'])} {team1['tag']} :black_small_square: vs :black_small_square: {team2['tag']} {flag.flagize(team2['country'])}", description=f":calendar_spiral: {date_str}")
     e.add_field(name="Streamer :eyes: : :black_small_square: ", value=strmavi, inline = True)
     e.add_field(name="Shoutcaster :microphone2: :", value=shtavi, inline = True)
 

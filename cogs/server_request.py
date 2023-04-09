@@ -14,6 +14,7 @@ import cogs.common.update as update
 import cogs.common.check as check
 import cogs.common.dropmenus as dropmenus
 import datetime
+from cogs.common.enums import *
 # Temporary while discord.py 2.0 isnt out
 from discord_components import DiscordComponents, Button, ButtonStyle, InteractionType, Select, SelectOption, component, interaction
 
@@ -50,7 +51,9 @@ class ServerRequest(commands.Cog):
         servers = await ftw_client.server_locations()
 
         region_list: Dict[str, dropmenus.RegionList] = {}
-        for server in servers.values():
+        for (i, server) in enumerate(servers.values()):
+            if i > 24:
+                break# TEMP FIX FOR DISCORD SELECT MENU
             r = dropmenus.RegionList()
             r.label = f"{server['name']}, {server['country']}"
             r.emoji = flag.flagize(f":{server['country']}:")
@@ -89,6 +92,11 @@ class ServerRequest(commands.Cog):
         #game_server.rcon_command("exec utcs_fall21_ts")
 
         await interaction.message.channel.send(self.bot.quotes['cmdServerRequest_success'].format(ip=game_server.ip, password=game_server.password, rcon=game_server.rcon_password, hours=server_ttl))
+
+        # if int(fixture_info['status']) == 1:
+        #     # Set fixture to on-going
+        #     self.bot.db.edit_fixture(fixture_info['id'], status=FixtureStatus.InProgress)
+
 
 
 def setup(bot):
